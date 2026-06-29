@@ -2455,6 +2455,52 @@ def apply_num_input(kind, amount):
             db.update_character_hp(ent.id, ent.hp)
     num_input_popup = None
 
+def _apply_hp_popup(kind, val):
+    """Apply a result from HPPopup.hit() or HPPopup.key() to the entity."""
+    global hp_popup
+    if kind == 'close':
+        hp_popup = None
+    elif kind == 'hp':
+        ent = hp_popup.entity
+        ent.hp = max(0, ent.hp + val)
+        if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
+        else:            db.update_character_hp(ent.id, ent.hp)
+    elif kind == 'max_hp':
+        ent = hp_popup.entity
+        ent.max_hp = max(1, ent.max_hp + val)
+        if ent.is_enemy: db.update_enemy_max_hp(ent.id, ent.max_hp)
+        else:            db.update_character_max_hp(ent.id, ent.max_hp)
+    elif kind == 'full_heal':
+        ent = hp_popup.entity
+        ent.hp = ent.max_hp
+        if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
+        else:            db.update_character_hp(ent.id, ent.hp)
+    elif kind == 'set_as_max':
+        ent = hp_popup.entity
+        ent.max_hp = max(1, ent.hp)
+        ent.hp     = ent.max_hp
+        if ent.is_enemy:
+            db.update_enemy_max_hp(ent.id, ent.max_hp)
+            db.update_enemy_hp(ent.id, ent.hp)
+        else:
+            db.update_character_max_hp(ent.id, ent.max_hp)
+            db.update_character_hp(ent.id, ent.hp)
+    elif kind == 'set_hp_abs':
+        ent = hp_popup.entity
+        ent.hp = max(0, min(ent.max_hp, val))
+        if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
+        else:            db.update_character_hp(ent.id, ent.hp)
+    elif kind == 'set_max_abs':
+        ent = hp_popup.entity
+        ent.max_hp = max(1, val)
+        ent.hp     = min(ent.hp, ent.max_hp)
+        if ent.is_enemy:
+            db.update_enemy_max_hp(ent.id, ent.max_hp)
+            db.update_enemy_hp(ent.id, ent.hp)
+        else:
+            db.update_character_max_hp(ent.id, ent.max_hp)
+            db.update_character_hp(ent.id, ent.hp)
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 running = True
 clock   = pygame.time.Clock()
@@ -2748,33 +2794,7 @@ while running:
                     continue
                 if hp_popup:
                     kind, val = hp_popup.hit(fake_pos)
-                    if kind == 'close':
-                        hp_popup = None
-                    elif kind == 'hp':
-                        ent = hp_popup.entity
-                        ent.hp = max(0, ent.hp + val)
-                        if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
-                        else:            db.update_character_hp(ent.id, ent.hp)
-                    elif kind == 'max_hp':
-                        ent = hp_popup.entity
-                        ent.max_hp = max(1, ent.max_hp + val)
-                        if ent.is_enemy: db.update_enemy_max_hp(ent.id, ent.max_hp)
-                        else:            db.update_character_max_hp(ent.id, ent.max_hp)
-                    elif kind == 'full_heal':
-                        ent = hp_popup.entity
-                        ent.hp = ent.max_hp
-                        if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
-                        else:            db.update_character_hp(ent.id, ent.hp)
-                    elif kind == 'set_as_max':
-                        ent = hp_popup.entity
-                        ent.max_hp = max(1, ent.hp)
-                        ent.hp     = ent.max_hp
-                        if ent.is_enemy:
-                            db.update_enemy_max_hp(ent.id, ent.max_hp)
-                            db.update_enemy_hp(ent.id, ent.hp)
-                        else:
-                            db.update_character_max_hp(ent.id, ent.max_hp)
-                            db.update_character_hp(ent.id, ent.hp)
+                    _apply_hp_popup(kind, val)
                     continue
 
                 if conditions_popup:
@@ -3077,33 +3097,7 @@ while running:
             # HP popup
             if hp_popup:
                 kind, val = hp_popup.hit(pos)
-                if kind == 'close':
-                    hp_popup = None
-                elif kind == 'hp':
-                    ent = hp_popup.entity
-                    ent.hp = max(0, ent.hp + val)
-                    if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
-                    else:            db.update_character_hp(ent.id, ent.hp)
-                elif kind == 'max_hp':
-                    ent = hp_popup.entity
-                    ent.max_hp = max(1, ent.max_hp + val)
-                    if ent.is_enemy: db.update_enemy_max_hp(ent.id, ent.max_hp)
-                    else:            db.update_character_max_hp(ent.id, ent.max_hp)
-                elif kind == 'full_heal':
-                    ent = hp_popup.entity
-                    ent.hp = ent.max_hp
-                    if ent.is_enemy: db.update_enemy_hp(ent.id, ent.hp)
-                    else:            db.update_character_hp(ent.id, ent.hp)
-                elif kind == 'set_as_max':
-                    ent = hp_popup.entity
-                    ent.max_hp = max(1, ent.hp)
-                    ent.hp     = ent.max_hp
-                    if ent.is_enemy:
-                        db.update_enemy_max_hp(ent.id, ent.max_hp)
-                        db.update_enemy_hp(ent.id, ent.hp)
-                    else:
-                        db.update_character_max_hp(ent.id, ent.max_hp)
-                        db.update_character_hp(ent.id, ent.hp)
+                _apply_hp_popup(kind, val)
                 continue
 
             # Conditions popup
@@ -3421,6 +3415,12 @@ while running:
                 kind, val = num_input_popup.key(event)
                 if kind in ('confirm', 'cancel'):
                     apply_num_input(kind, val or 0)
+                continue
+
+            # HP popup typed-input captures keys when a field is focused
+            if hp_popup and hp_popup.focus is not None:
+                kind, val = hp_popup.key(event)
+                _apply_hp_popup(kind, val)
                 continue
 
             if _place_item_dialog:

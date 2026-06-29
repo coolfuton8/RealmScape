@@ -706,13 +706,16 @@ class InitiativePanel:
 class HPPopup:
     """Modal popup for adjusting an entity's HP."""
 
-    W = 460; H = 260
+    W = 460; H = 306
 
     def __init__(self, entity, font, screen_w, screen_h):
-        self.entity = entity
-        self.font   = font
-        self.x      = (screen_w - self.W) // 2
-        self.y      = (screen_h - self.H) // 2
+        self.entity  = entity
+        self.font    = font
+        self.x       = (screen_w - self.W) // 2
+        self.y       = (screen_h - self.H) // 2
+        self.focus   = None   # None | 'hp' | 'max'
+        self.hp_buf  = ''
+        self.max_buf = ''
         self._build()
 
     def _build(self):
@@ -742,6 +745,11 @@ class HPPopup:
         abw    = (self.W - 48) // 2
         self.full_heal_rect  = pygame.Rect(self.x + 16,          act_y, abw, 38)
         self.set_max_rect    = pygame.Rect(self.x + 16 + abw + 8, act_y, abw, 38)
+
+        # Typed-input row — "HP [___]  Max [___]", centred in the popup
+        type_y = act_y + 38 + 12
+        self.hp_field_rect  = pygame.Rect(self.x + 120, type_y, 80, 34)
+        self.max_field_rect = pygame.Rect(self.x + 260, type_y, 80, 34)
 
         close_x = self.x + self.W - 44
         close_y = self.y + 4
@@ -789,6 +797,26 @@ class HPPopup:
         surface.blit(sm_t, (self.set_max_rect.centerx - sm_t.get_width() // 2,
                             self.set_max_rect.centery - sm_t.get_height() // 2))
 
+        # Typed-input row
+        hp_lbl  = self.font.render('HP:', True, LIGHT_GRAY)
+        max_lbl = self.font.render('Max:', True, LIGHT_GRAY)
+        surface.blit(hp_lbl,  (self.hp_field_rect.x  - hp_lbl.get_width()  - 6,
+                                self.hp_field_rect.centery - hp_lbl.get_height() // 2))
+        surface.blit(max_lbl, (self.max_field_rect.x - max_lbl.get_width() - 6,
+                                self.max_field_rect.centery - max_lbl.get_height() // 2))
+        for field_rect, focused, buf, hint in (
+            (self.hp_field_rect,  self.focus == 'hp',  self.hp_buf,  str(self.entity.hp)),
+            (self.max_field_rect, self.focus == 'max', self.max_buf, str(self.entity.max_hp)),
+        ):
+            border_col = WHITE if focused else PANEL_BORDER
+            pygame.draw.rect(surface, TOOLBAR_BTN, field_rect, border_radius=4)
+            pygame.draw.rect(surface, border_col,  field_rect, 1, border_radius=4)
+            display = (buf + '|') if focused else hint
+            color   = WHITE if focused else YELLOW
+            t = self.font.render(display, True, color)
+            surface.blit(t, (field_rect.centerx - t.get_width() // 2,
+                              field_rect.centery - t.get_height() // 2))
+
         # Close button
         pygame.draw.rect(surface, (120, 30, 30), self.close_rect, border_radius=5)
         t = self.font.render('X', True, WHITE)
@@ -798,20 +826,90 @@ class HPPopup:
     def hit(self, pos):
         """
         Returns ('close', None), ('hp', delta), ('max_hp', delta),
-        ('full_heal', None), ('set_as_max', None), or (None, None).
+        ('full_heal', None), ('set_as_max', None),
+        ('set_hp_abs', value), ('set_max_abs', value), or (None, None).
         """
         if self.close_rect.collidepoint(pos):
             return ('close', None)
         for rect, _, delta in self.btns:
             if rect.collidepoint(pos):
+                self.focus = None
                 return ('hp', delta)
         for rect, _, delta in self.max_btns:
             if rect.collidepoint(pos):
+                self.focus = None
                 return ('max_hp', delta)
         if self.full_heal_rect.collidepoint(pos):
+            self.focus = None
             return ('full_heal', None)
         if self.set_max_rect.collidepoint(pos):
+            self.focus = None
             return ('set_as_max', None)
+        if self.hp_field_rect.collidepoint(pos):
+            if self.focus == 'max':
+                result = self._commit_max()
+                if result[0] is not None:
+                    self.focus = 'hp'; self.hp_buf = ''
+                    return result
+            self.focus = 'hp'
+            self.hp_buf = ''
+            return (None, None)
+        if self.max_field_rect.collidepoint(pos):
+            if self.focus == 'hp':
+                result = self._commit_hp()
+                if result[0] is not None:
+                    self.focus = 'max'; self.max_buf = ''
+                    return result
+            self.focus = 'max'
+            self.max_buf = ''
+            return (None, None)
+        return (None, None)
+
+    def _commit_hp(self):
+        if self.hp_buf:
+            try:
+                val = max(0, min(self.entity.max_hp, int(self.hp_buf)))
+                self.hp_buf = ''
+                self.focus = None
+                return ('set_hp_abs', val)
+            except ValueError:
+                pass
+        self.hp_buf = ''
+        self.focus = None
+        return (None, None)
+
+    def _commit_max(self):
+        if self.max_buf:
+            try:
+                val = max(1, int(self.max_buf))
+                self.max_buf = ''
+                self.focus = None
+                return ('set_max_abs', val)
+            except ValueError:
+                pass
+        self.max_buf = ''
+        self.focus = None
+        return (None, None)
+
+    def key(self, event):
+        """Handle a KEYDOWN event. Returns same (kind, val) as hit()."""
+        if self.focus is None:
+            if event.key == pygame.K_ESCAPE:
+                return ('close', None)
+            return (None, None)
+        buf_attr = 'hp_buf' if self.focus == 'hp' else 'max_buf'
+        if event.key == pygame.K_ESCAPE:
+            setattr(self, buf_attr, '')
+            self.focus = None
+            return (None, None)
+        if event.key == pygame.K_RETURN:
+            if self.focus == 'hp':
+                return self._commit_hp()
+            return self._commit_max()
+        if event.key == pygame.K_BACKSPACE:
+            setattr(self, buf_attr, getattr(self, buf_attr)[:-1])
+        elif event.unicode.isdigit() and len(getattr(self, buf_attr)) < 4:
+            setattr(self, buf_attr, getattr(self, buf_attr) + event.unicode)
         return (None, None)
 
 
@@ -1143,6 +1241,8 @@ class CharacterDialog:
             self.image_path     = ''
             self.is_npc         = False
 
+        self.focus  = 'name'   # 'name' | 'hp'
+        self.hp_buf = ''       # typed digits while focus == 'hp'
         self._build()
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -1177,9 +1277,10 @@ class CharacterDialog:
             for i in range(len(self.SIZES))
         ]
 
-        # Max-HP ± buttons
-        self.hp_minus = pygame.Rect(bx + self.W // 2 - 70, by + 346, 44, 36)
-        self.hp_plus  = pygame.Rect(bx + self.W // 2 + 26, by + 346, 44, 36)
+        # Max-HP ± buttons and clickable value field
+        self.hp_minus    = pygame.Rect(bx + self.W // 2 - 70, by + 346, 44, 36)
+        self.hp_plus     = pygame.Rect(bx + self.W // 2 + 26, by + 346, 44, 36)
+        self.hp_val_rect = pygame.Rect(bx + self.W // 2 - 26, by + 346, 52, 36)
 
         # Initiative Bonus ± buttons
         self.ib_minus = pygame.Rect(bx + self.W // 2 - 70, by + 400, 44, 36)
@@ -1307,7 +1408,8 @@ class CharacterDialog:
         surface.blit(self.font.render('Name:', True, LIGHT_GRAY), (self.x + 12, self.y + 54))
         pygame.draw.rect(surface, TOOLBAR_BTN,   self.name_rect, border_radius=4)
         pygame.draw.rect(surface, PANEL_BORDER,  self.name_rect, 1, border_radius=4)
-        surface.blit(self.font.render(self.name_buf + '|', True, WHITE),
+        name_display = self.name_buf + ('|' if self.focus == 'name' else '')
+        surface.blit(self.font.render(name_display, True, WHITE),
                      (self.name_rect.x + 6, self.name_rect.y + 6))
 
         # Colour label + swatches
@@ -1344,8 +1446,16 @@ class CharacterDialog:
         pygame.draw.rect(surface, (80, 40, 40), self.hp_minus, border_radius=5)
         surface.blit(self.font.render('-', True, WHITE),
                      (self.hp_minus.centerx - 4, self.hp_minus.centery - 10))
-        hp_t = self.font.render(str(self.max_hp), True, YELLOW)
-        surface.blit(hp_t, (self.x + self.W//2 - hp_t.get_width()//2, self.y + 354))
+        if self.focus == 'hp':
+            pygame.draw.rect(surface, TOOLBAR_BTN, self.hp_val_rect, border_radius=4)
+            pygame.draw.rect(surface, WHITE, self.hp_val_rect, 1, border_radius=4)
+            hp_t = self.font.render((self.hp_buf or '') + '|', True, WHITE)
+        else:
+            pygame.draw.rect(surface, TOOLBAR_BTN, self.hp_val_rect, border_radius=4)
+            pygame.draw.rect(surface, PANEL_BORDER, self.hp_val_rect, 1, border_radius=4)
+            hp_t = self.font.render(str(self.max_hp), True, YELLOW)
+        surface.blit(hp_t, (self.hp_val_rect.centerx - hp_t.get_width() // 2,
+                             self.hp_val_rect.centery - hp_t.get_height() // 2))
         pygame.draw.rect(surface, (40, 80, 40), self.hp_plus, border_radius=5)
         surface.blit(self.font.render('+', True, WHITE),
                      (self.hp_plus.centerx - 4, self.hp_plus.centery - 10))
@@ -1401,16 +1511,39 @@ class CharacterDialog:
 
     # ── Event handling ────────────────────────────────────────────────────────
 
+    def _commit_hp(self):
+        """Parse hp_buf and apply it to max_hp, then clear the buffer."""
+        if self.hp_buf:
+            try:
+                self.max_hp = max(1, min(999, int(self.hp_buf)))
+            except ValueError:
+                pass
+        self.hp_buf = ''
+
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
+                if self.focus == 'hp':
+                    self.hp_buf = ''
+                    self.focus = 'name'
+                    return None
                 return 'cancel'
             if event.key == pygame.K_RETURN:
+                if self.focus == 'hp':
+                    self._commit_hp()
+                    self.focus = 'name'
+                    return None
                 return self._result()
-            if event.key == pygame.K_BACKSPACE:
-                self.name_buf = self.name_buf[:-1]
-            elif event.unicode and event.unicode.isprintable() and len(self.name_buf) < 30:
-                self.name_buf += event.unicode
+            if self.focus == 'hp':
+                if event.key == pygame.K_BACKSPACE:
+                    self.hp_buf = self.hp_buf[:-1]
+                elif event.unicode.isdigit() and len(self.hp_buf) < 3:
+                    self.hp_buf += event.unicode
+            else:
+                if event.key == pygame.K_BACKSPACE:
+                    self.name_buf = self.name_buf[:-1]
+                elif event.unicode and event.unicode.isprintable() and len(self.name_buf) < 30:
+                    self.name_buf += event.unicode
             return None
 
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
@@ -1420,7 +1553,16 @@ class CharacterDialog:
         if self.close_rect.collidepoint(pos) or self.cancel_rect.collidepoint(pos):
             return 'cancel'
         if self.confirm_rect.collidepoint(pos):
+            self._commit_hp()
             return self._result()
+        if self.name_rect.collidepoint(pos):
+            self._commit_hp()
+            self.focus = 'name'
+            return None
+        if self.hp_val_rect.collidepoint(pos):
+            self.focus = 'hp'
+            self.hp_buf = str(self.max_hp)
+            return None
         for i, rect in enumerate(self.color_rects):
             if rect.collidepoint(pos):
                 self.sel_color_idx = i; return None
@@ -1428,12 +1570,18 @@ class CharacterDialog:
             if rect.collidepoint(pos):
                 self.sel_size_idx = i; return None
         if self.hp_minus.collidepoint(pos):
+            self._commit_hp()
             self.max_hp = max(1, self.max_hp - 1)
         elif self.hp_plus.collidepoint(pos):
+            self._commit_hp()
             self.max_hp = min(999, self.max_hp + 1)
         elif self.ib_minus.collidepoint(pos):
+            self._commit_hp()
+            self.focus = 'name'
             self.init_bonus = max(-9, self.init_bonus - 1)
         elif self.ib_plus.collidepoint(pos):
+            self._commit_hp()
+            self.focus = 'name'
             self.init_bonus = min(20, self.init_bonus + 1)
         elif self.browse_rect.collidepoint(pos):
             self._browse_image()
