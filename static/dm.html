@@ -1,0 +1,2364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RealmScape — GM Panel</title>
+<link rel="icon" type="image/png" href="/favicon.ico">
+<script src="/static/socket.io.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Dark thin scrollbars throughout */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #12131a; }
+::-webkit-scrollbar-thumb { background: #3c3f58; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #5a5e80; }
+
+body {
+  background: #12131a;
+  color: #dde0e8;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 13px;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+#hdr {
+  background: #1b1d2b;
+  border-bottom: 2px solid #2a2d40;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+#hdr h1 { font-size: 15px; color: #f0a500; letter-spacing: .5px; }
+#conn-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+#conn-status.ok { background: #14532d; color: #86efac; }
+#server-hint { font-size: 11px; color: #555; margin-left: auto; }
+
+/* ── Body layout ── */
+#body {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Panels ── */
+.panel {
+  background: #1b1d2b;
+  border: 1px solid #2a2d40;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.panel-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: #f0a500;
+  border-bottom: 1px solid #2a2d40;
+  padding-bottom: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Left column ── */
+#col-left {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* ── Map column ── */
+#col-map {
+  flex: 1;
+  min-width: 0;
+}
+#col-map .panel { height: 100%; }
+
+#map-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border-radius: 4px;
+  cursor: crosshair;
+  background: #0d0e14;
+  display: block;
+}
+
+
+/* ── Bottom strip ── */
+#bottom {
+  display: flex;
+  gap: 6px;
+  height: clamp(130px, 22vh, 200px);
+  flex-shrink: 0;
+  padding: 0 6px 6px;
+}
+#bottom .panel { flex: 1; overflow: hidden; }
+#bottom .scroll { overflow-y: auto; flex: 1; min-height: 0; }
+
+/* ── Scene buttons ── */
+.scene-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  background: #222438;
+  border: 1px solid #2a2d40;
+  border-radius: 4px;
+  color: #dde0e8;
+  cursor: pointer;
+  font-size: 12px;
+}
+.scene-btn:hover  { background: #2d3055; }
+.scene-btn.active { background: #f0a500; color: #12131a; font-weight: 700; border-color: #f0a500; }
+
+/* ── Generic buttons ── */
+.btn {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn-gold   { background: #b45309; color: #fff; }
+.btn-green  { background: #166534; color: #86efac; }
+.btn-slate  { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+.btn-red    { background: #7f1d1d; color: #fca5a5; }
+.btn-purple { background: #4c1d95; color: #c4b5fd; }
+.btn-full   { width: 100%; }
+
+/* ── Fog button ── */
+#fog-btn { width: 100%; }
+#fog-btn.fog-on { background: #1d4ed8; color: #bfdbfe; }
+#fog-btn.fog-off { background: #374151; color: #9ca3af; }
+
+/* ── Initiative ── */
+#init-list { overflow-y: auto; max-height: 220px; }
+.init-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 5px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  background: #12131a;
+}
+.init-row.cur { background: #172554; outline: 1px solid #f0a500; }
+.init-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.init-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.init-val  { color: #f0a500; font-weight: 700; font-size: 12px; min-width: 22px; text-align: right; }
+
+/* ── Entity tables ── */
+.ent-table { width: 100%; border-collapse: collapse; }
+.ent-table th {
+  text-align: left; font-size: 10px; color: #6b7280;
+  padding: 2px 4px; border-bottom: 1px solid #2a2d40;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+}
+.ent-table td { padding: 4px 4px; border-bottom: 1px solid #1b1d2b; vertical-align: middle; }
+.ent-table tr:hover td { background: #1e2035; }
+.color-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* ── HP controls ── */
+.hp-grp { display: flex; align-items: center; gap: 3px; }
+.hp-btn {
+  width: 20px; height: 20px;
+  border: none; border-radius: 3px;
+  cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.hp-minus { background: #7f1d1d; color: #fca5a5; }
+.hp-plus  { background: #14532d; color: #86efac; }
+.hp-val   { min-width: 52px; text-align: center; font-size: 11px; }
+.hp-bar   { height: 3px; border-radius: 2px; margin-top: 2px; background: #1f2937; }
+.hp-fill  { height: 100%; border-radius: 2px; }
+
+/* ── Initiative input ── */
+.init-inp {
+  width: 36px; background: #12131a; color: #f0a500;
+  border: 1px solid #2a2d40; border-radius: 3px;
+  padding: 2px 3px; font-size: 11px; text-align: center;
+}
+
+/* ── Collapsible left-column panels ── */
+#col-left .panel { padding: 6px; gap: 4px; }
+#col-left .panel-title { cursor: pointer; user-select: none; }
+#col-left .panel-title .cp-arrow {
+  float: right; font-size: 9px; margin-left: 4px; line-height: inherit;
+}
+
+/* ── Selected info ── */
+#sel-panel { flex-shrink: 0; }
+#sel-name  { font-weight: 700; font-size: 13px; }
+#sel-pos   { font-size: 11px; color: #6b7280; margin-top: 2px; }
+#sel-hint  { font-size: 10px; color: #4b5563; line-height: 1.4; }
+
+/* ── Turn controls ── */
+.turn-row { display: flex; gap: 4px; }
+.turn-row .btn { flex: 1; }
+
+/* ── Lock ── */
+#lock-btn {
+  font-size: 11px; padding: 3px 10px; border-radius: 10px;
+  background: #2a2d40; border: 1px solid #3c3f58; color: #aab;
+  cursor: pointer; white-space: nowrap; margin-left: 4px;
+}
+#lock-btn.locked { background: #7c1d1d; color: #fca5a5; border-color: #991b1b; }
+#lock-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.88);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+#lock-overlay.hidden { display: none; }
+.lock-box {
+  background: #0c1020; border: 2px solid #3c78c8;
+  border-radius: 12px; padding: 20px 20px 16px; width: 320px; text-align: center;
+}
+.lock-title { font-size: 18px; color: #c8a032; font-weight: bold; margin-bottom: 6px; }
+.lock-sub   { font-size: 12px; color: #8899aa; margin-bottom: 10px; }
+.pin-dots   { display: flex; justify-content: center; gap: 12px; margin: 8px 0 4px; min-height: 22px; }
+.pin-dot    { width: 16px; height: 16px; border-radius: 50%; background: #1e2a40; border: 2px solid #3c6090; }
+.pin-dot.filled { background: #dde0e8; border-color: #dde0e8; }
+.pin-error  { color: #e05050; font-size: 12px; min-height: 18px; margin-bottom: 4px; }
+.numpad     { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.numpad button {
+  padding: 16px 0; font-size: 16px; border: 1px solid #2a3a5a;
+  border-radius: 7px; background: #1e2d50; color: #dde0e8;
+  cursor: pointer; touch-action: manipulation; user-select: none;
+}
+.numpad button:active { opacity: .7; }
+.numpad .clr-btn { background: #5c1010; }
+.numpad .ok-btn  { background: #1a5c2a; }
+#pin-modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,.65);
+  display: flex; align-items: center; justify-content: center; z-index: 8888;
+}
+#pin-modal-bg.hidden { display: none; }
+#pin-modal {
+  background: #12131a; border: 2px solid #3c78c8;
+  border-radius: 10px; padding: 20px 20px 14px; width: 320px; text-align: center;
+}
+#pin-modal h3 { color: #8cb8f0; margin-bottom: 12px; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <h1>RealmScape — GM Panel</h1>
+  <span id="conn-status">Connecting…</span>
+  <button id="lock-btn" onclick="handleLockBtn()">Lock</button>
+  <button class="btn" style="font-size:11px;padding:3px 8px" onclick="openPinSetup()">Set PIN</button>
+  <a href="/manual" target="_blank" class="btn" style="font-size:11px;padding:3px 8px;text-decoration:none;">User Manual</a>
+  <span id="server-hint"></span>
+</div>
+
+<div id="body">
+
+  <!-- ── Left: controls ── -->
+  <div id="col-left">
+    <div class="panel">
+      <div class="panel-title">Campaign</div>
+      <div id="campaign-name" style="font-size:13px;font-weight:bold;color:#c4b5fd;margin-bottom:6px;">—</div>
+      <button class="btn btn-full" style="background:#4c1d95;" onclick="openCampaignModal()">Manage Campaigns</button>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Scenes</div>
+      <div id="scene-list"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Party</div>
+      <button id="fog-btn" class="btn fog-off btn-full" style="margin-bottom:4px;">Fog: OFF</button>
+      <button id="party-btn" class="btn btn-purple btn-full">Move Entire Party</button>
+      <div style="font-size:10px;color:#6b7280;margin-top:4px;line-height:1.4;">
+        Click or drag on the map to move all characters together.
+      </div>
+    </div>
+    <div class="panel" id="sel-panel">
+      <div class="panel-title">Selected Token</div>
+      <div id="sel-name" style="color:#9ca3af;">None</div>
+      <div id="sel-pos"></div>
+      <div id="sel-conditions" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+      <div id="sel-cond-toggle" style="margin-top:6px;display:none;flex-wrap:wrap;gap:4px;"></div>
+      <div id="sel-hint" style="margin-top:4px;">Click a token on the map to select it, then click the map to move it — or drag the token directly.</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title" style="display:flex;align-items:center;gap:4px;">
+        <span style="flex:1;min-width:0;">Sound Zones</span>
+        <button onclick="toggleZoneDraw()" id="zone-draw-btn"
+          style="padding:2px 6px;font-size:11px;background:#1e3a5f;border:none;color:#fff;border-radius:4px;cursor:pointer;white-space:nowrap;flex-shrink:0;">+ Add Zone</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#d1d5db;cursor:pointer;margin-bottom:6px;">
+        <input type="checkbox" id="music-enabled-chk" onchange="setMusicEnabled(this.checked)"
+          style="width:15px;height:15px;cursor:pointer;accent-color:#4ade80;">
+        Music enabled
+      </label>
+      <!-- Default ambient track row -->
+      <div id="default-zone-row"
+        style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;background:#2d2d44;border:1px solid #6366f1;margin-bottom:6px;overflow:hidden;">
+        <span style="font-size:11px;color:#a5b4fc;flex-shrink:0;">♪ Ambient:</span>
+        <span id="default-zone-label" style="flex:1;min-width:0;font-size:11px;color:#d1d5db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">None</span>
+        <button onclick="editDefaultZone()" style="background:#1e3a5f;border:none;color:#fff;border-radius:3px;padding:2px 7px;cursor:pointer;font-size:11px;">Edit</button>
+        <button onclick="clearDefaultZone()" id="default-zone-clear" style="background:#7f1d1d;border:none;color:#fff;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;display:none;">✕</button>
+      </div>
+      <div id="zone-list" style="display:flex;flex-direction:column;gap:4px;"></div>
+      <div id="zone-now-playing" style="font-size:11px;color:#4ade80;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:none;"></div>
+      <div id="spotify-status-row" style="font-size:11px;color:#6b7280;display:flex;align-items:center;gap:6px;">
+        <span id="spotify-status-dot" style="width:8px;height:8px;border-radius:50%;background:#6b7280;flex-shrink:0;"></span>
+        <span id="spotify-status-txt">Spotify: checking…</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Initiative</div>
+      <button id="roll-btn" class="btn btn-gold btn-full">Roll Initiative</button>
+      <div class="turn-row">
+        <button id="prev-btn" class="btn btn-slate">&#9664; Prev</button>
+        <button id="next-btn" class="btn btn-slate">Next &#9654;</button>
+      </div>
+      <div class="turn-row" style="margin-top:4px;">
+        <button onclick="openGroupHpModal(true)"  class="btn btn-red"  style="flex:1;">&#9876; Group DMG</button>
+        <button onclick="openGroupHpModal(false)" class="btn btn-green" style="flex:1;">&#10084; Group Heal</button>
+      </div>
+      <div id="init-list"></div>
+    </div>
+    <div class="panel" id="notes-panel" style="display:none;">
+      <div class="panel-title">Scene Notes</div>
+      <div id="notes-body" style="font-size:12px;color:#d1d5db;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;line-height:1.5;"></div>
+    </div>
+  </div>
+
+  <!-- ── Centre: Map canvas ── -->
+  <div id="col-map">
+    <div class="panel">
+      <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Map View</span>
+        <button id="view-toggle" class="btn btn-slate" style="padding:2px 8px;font-size:11px;"
+                onclick="toggleViewMode()">Overview</button>
+      </div>
+      <canvas id="map-canvas"></canvas>
+    </div>
+  </div>
+
+</div><!-- #body -->
+
+<!-- ── Bottom: Characters + NPCs + Enemies ── -->
+<div id="bottom">
+  <div class="panel">
+    <div class="panel-title">Characters</div>
+    <div class="scroll">
+      <table class="ent-table">
+        <thead><tr><th></th><th>Name</th><th>HP</th><th>Init</th></tr></thead>
+        <tbody id="char-tbody"></tbody>
+      </table>
+      <div id="npc-section" style="display:none;margin-top:6px;">
+        <div style="font-size:11px;color:#888;padding:2px 4px;border-top:1px solid #333;margin-bottom:2px;">NPCs</div>
+        <table class="ent-table">
+          <tbody id="npc-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Enemies</div>
+    <div class="scroll">
+      <table class="ent-table">
+        <thead><tr><th></th><th>Name</th><th>HP</th><th>Init</th><th></th></tr></thead>
+        <tbody id="enemy-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Zone create/edit modal -->
+<div id="zone-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1c1c2e;border:2px solid #1e3a5f;border-radius:10px;padding:20px;width:440px;max-width:95vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <span id="zone-modal-title" style="font-size:15px;font-weight:bold;color:#93c5fd;">New Sound Zone</span>
+      <button onclick="closeZoneModal()" style="background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:2px 10px;cursor:pointer;">✕</button>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:12px;color:#9ca3af;">Name</label>
+      <input id="zone-name-inp" type="text" value="New Zone"
+        style="width:100%;box-sizing:border-box;margin-top:4px;padding:6px 10px;border-radius:5px;border:1px solid #1e40af;background:#2d2d44;color:#fff;font-size:13px;">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:12px;color:#9ca3af;">Track — Spotify · Tabletop Audio · .mp3 / .ogg / .wav path</label>
+      <div style="display:flex;gap:6px;margin-top:4px;">
+        <input id="zone-track-inp" type="text" placeholder="https://open.spotify.com/track/…"
+          style="flex:1;min-width:0;padding:6px 10px;border-radius:5px;border:1px solid #1e40af;background:#2d2d44;color:#93c5fd;font-size:12px;">
+        <button onclick="openTTABrowser()" style="background:#1e3a5f;border:1px solid #1e40af;color:#93c5fd;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:11px;white-space:nowrap;">Browse TTA</button>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;color:#9ca3af;">Color</label>
+      <div id="zone-color-swatches" style="display:flex;gap:8px;margin-top:6px;"></div>
+    </div>
+    <div id="zone-modal-err" style="color:#f87171;font-size:12px;min-height:14px;margin-bottom:8px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button onclick="closeZoneModal()" style="background:#374151;border:none;color:#fff;border-radius:5px;padding:7px 16px;cursor:pointer;">Cancel</button>
+      <button onclick="submitZone()" style="background:#1e40af;border:none;color:#fff;border-radius:5px;padding:7px 18px;cursor:pointer;font-weight:bold;">Create Zone</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tabletop Audio browser modal -->
+<div id="tta-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.80);z-index:300;align-items:center;justify-content:center;">
+  <div style="background:#1c1c2e;border:2px solid #1e3a5f;border-radius:10px;padding:20px;width:520px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:15px;font-weight:bold;color:#93c5fd;">Browse Tabletop Audio</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="send('stop_preview')" style="background:#374151;border:none;color:#f87171;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">⬛ Stop</button>
+        <button onclick="closeTTABrowser()" style="background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:2px 10px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+    <input id="tta-search" type="text" placeholder="Search tracks…" oninput="filterTTAList()"
+      style="width:100%;box-sizing:border-box;padding:7px 10px;border-radius:5px;border:1px solid #1e40af;background:#2d2d44;color:#fff;font-size:13px;">
+    <div id="tta-status" style="font-size:11px;color:#6b7280;"></div>
+    <div id="tta-list" style="flex:1;overflow-y:auto;min-height:200px;border:1px solid #1e3a5f;border-radius:5px;"></div>
+    <div style="font-size:11px;color:#6b7280;text-align:center;">▶ previews on the game display · click track name to select for zone</div>
+  </div>
+</div>
+
+<!-- HP damage/heal modal -->
+<div id="hp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1c1c2e;border:2px solid #374151;border-radius:10px;padding:20px;width:300px;max-width:95vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span id="hp-modal-name" style="font-size:15px;font-weight:bold;color:#f9fafb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;"></span>
+      <button onclick="closeHpModal()" style="background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:2px 10px;cursor:pointer;">✕</button>
+    </div>
+    <div id="hp-modal-cur" style="font-size:13px;color:#9ca3af;margin-bottom:4px;text-align:center;"></div>
+    <div id="hp-modal-action" style="font-size:12px;font-weight:bold;text-align:center;margin-bottom:10px;"></div>
+    <div style="margin-bottom:16px;">
+      <label style="font-size:12px;color:#9ca3af;">Amount</label>
+      <input id="hp-modal-amt" type="number" min="0" placeholder="0"
+        style="width:100%;box-sizing:border-box;margin-top:6px;padding:8px 12px;border-radius:5px;border:1px solid #374151;background:#2d2d44;color:#fff;font-size:20px;text-align:center;"
+        onkeydown="if(event.key==='Enter')applyHpModal(_hpIsDamage)">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="applyHpModal(true)"  style="flex:1;background:#7f1d1d;border:none;color:#fca5a5;border-radius:5px;padding:10px;cursor:pointer;font-size:14px;font-weight:bold;">Damage</button>
+      <button onclick="applyHpModal(false)" style="flex:1;background:#14532d;border:none;color:#86efac;border-radius:5px;padding:10px;cursor:pointer;font-size:14px;font-weight:bold;">Heal</button>
+    </div>
+    <button onclick="closeHpModal()" style="width:100%;margin-top:8px;background:#374151;border:none;color:#9ca3af;border-radius:5px;padding:6px;cursor:pointer;font-size:12px;">Cancel</button>
+  </div>
+</div>
+
+<!-- Group Damage / Heal modal -->
+<div id="group-hp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1c1c2e;border:2px solid #374151;border-radius:10px;padding:20px;width:500px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <span style="font-size:16px;font-weight:bold;color:#f9fafb;">Group Damage / Healing</span>
+      <button onclick="closeGroupHpModal()" style="background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:2px 10px;cursor:pointer;">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-size:13px;color:#9ca3af;">Select targets:</span>
+      <div style="display:flex;gap:6px;">
+        <button onclick="groupHpSelectAll()"  style="background:#374151;border:none;color:#fff;border-radius:4px;padding:3px 12px;font-size:12px;cursor:pointer;">All</button>
+        <button onclick="groupHpSelectNone()" style="background:#374151;border:none;color:#fff;border-radius:4px;padding:3px 12px;font-size:12px;cursor:pointer;">None</button>
+      </div>
+    </div>
+    <div id="group-hp-list" style="border:1px solid #374151;border-radius:6px;overflow-y:auto;flex:1;min-height:80px;max-height:300px;margin-bottom:14px;"></div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;color:#9ca3af;">Amount</label>
+      <input id="group-hp-amt" type="number" min="0" placeholder="0"
+        style="width:100%;box-sizing:border-box;margin-top:6px;padding:8px 12px;border-radius:5px;border:1px solid #374151;background:#2d2d44;color:#fff;font-size:20px;text-align:center;"
+        onkeydown="if(event.key==='Enter')applyGroupHp(_groupHpIsDamage)">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="applyGroupHp(true)"  style="flex:1;background:#7f1d1d;border:none;color:#fca5a5;border-radius:5px;padding:10px;cursor:pointer;font-size:14px;font-weight:bold;">Damage</button>
+      <button onclick="applyGroupHp(false)" style="flex:1;background:#14532d;border:none;color:#86efac;border-radius:5px;padding:10px;cursor:pointer;font-size:14px;font-weight:bold;">Heal</button>
+    </div>
+    <button onclick="closeGroupHpModal()" style="width:100%;margin-top:8px;background:#374151;border:none;color:#9ca3af;border-radius:5px;padding:6px;cursor:pointer;font-size:12px;">Cancel</button>
+  </div>
+</div>
+
+
+<!-- Campaign modal -->
+<div id="campaign-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1c1c2e;border:2px solid #7c3aed;border-radius:10px;padding:20px;width:420px;max-width:95vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <span style="font-size:16px;font-weight:bold;color:#c4b5fd;">Campaigns</span>
+      <button onclick="closeCampaignModal()" style="background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:2px 10px;cursor:pointer;font-size:14px;">✕</button>
+    </div>
+    <div id="campaign-list" style="margin-bottom:14px;max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input id="campaign-new-name" type="text" placeholder="New campaign name…"
+        style="flex:1;padding:6px 10px;border-radius:5px;border:1px solid #7c3aed;background:#2d2d44;color:#fff;font-size:13px;">
+      <button onclick="createCampaign(false)" style="background:#166534;border:none;color:#fff;border-radius:5px;padding:6px 12px;cursor:pointer;white-space:nowrap;">Create</button>
+      <button onclick="createCampaign(true)"  style="background:#1e3a5f;border:none;color:#fff;border-radius:5px;padding:6px 12px;cursor:pointer;white-space:nowrap;">Create &amp; Switch</button>
+    </div>
+    <div id="campaign-modal-err" style="color:#f87171;font-size:12px;min-height:16px;"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Socket.IO ─────────────────────────────────────────────────────────────────
+const socket = io({ transports: ['websocket', 'polling'] });
+let G = null;                    // current game state from server
+let campaignRenaming = false;   // true while an inline rename input is open
+
+// Mirror of constants.py CONDITIONS — code: { abbr, color, name }
+const CONDITIONS = {
+  BLD: { abbr:'B',  color:'#969696', name:'Blinded' },
+  CHM: { abbr:'C',  color:'#ffb6c1', name:'Charmed' },
+  DEA: { abbr:'D',  color:'#c8c8c8', name:'Deafened' },
+  FRT: { abbr:'F',  color:'#ff6400', name:'Frightened' },
+  GRP: { abbr:'G',  color:'#8b4513', name:'Grappled' },
+  INC: { abbr:'I',  color:'#ffff00', name:'Incapacitated' },
+  INV: { abbr:'N',  color:'#c8c8ff', name:'Invisible' },
+  PAR: { abbr:'Pa', color:'#ff00ff', name:'Paralyzed' },
+  POI: { abbr:'Po', color:'#00b400', name:'Poisoned' },
+  PRN: { abbr:'Pr', color:'#b47832', name:'Prone' },
+  RST: { abbr:'R',  color:'#ffa500', name:'Restrained' },
+  STN: { abbr:'S',  color:'#ffe600', name:'Stunned' },
+  UNC: { abbr:'U',  color:'#505050', name:'Unconscious' },
+  CON: { abbr:'K',  color:'#00c8ff', name:'Concentrating' },
+};
+let selected = null;             // { id, isEnemy, name }
+let dragToken = null;            // token currently being dragged
+let dragThrottle = 0;
+const DRAG_THROTTLE_MS = 60;
+let hoveredMarkerId  = null;   // id of marker under the cursor, for hover highlight
+let pressedMarker    = null;   // marker pressed on mousedown
+let markerPressStart = null;   // [cx, cy] at mousedown on a marker
+let markerDragOrig   = null;   // {x, y} world position when drag began
+
+// Token image cache: key = "c{id}:{img_key}" or "e{id}:{img_key}" → Image | null
+const _imgCache = {};
+function tokenImg(t, isEnemy) {
+  const key = (isEnemy ? 'e' : 'c') + t.id + ':' + (t.img_key || '');
+  if (!t.img_key) return null;
+  if (key in _imgCache) return _imgCache[key];   // Image or null
+  _imgCache[key] = null;  // mark as loading
+  const img = new Image();
+  img.onload  = () => { _imgCache[key] = img; drawMap(); };
+  img.onerror = () => { _imgCache[key] = null; };
+  img.src = `/api/entity-image/${isEnemy ? 'enemy' : 'character'}/${t.id}?v=${encodeURIComponent(t.img_key)}`;
+  return null;
+}
+
+// Camera pan (overview mode drag)
+let cameraDragStart = null;   // { cx, cy, camX, camY } at drag start
+
+// Party move mode
+let partyMoveMode      = false;
+let partyDragStart     = null;   // canvas coords at drag start
+let partyInitCentroid  = null;   // world centroid at drag start
+
+socket.on('connect', () => {
+  const el = document.getElementById('conn-status');
+  el.textContent = 'Connected';
+  el.className = 'ok';
+  document.getElementById('server-hint').textContent = 'DM: ' + location.host;
+});
+socket.on('disconnect', () => {
+  const el = document.getElementById('conn-status');
+  el.textContent = 'Disconnected — retrying…';
+  el.className = '';
+});
+// Marker positions committed locally but not yet confirmed by server state
+const _pendingMarkerMoves = {};   // key: String(to_scene_id) → { x, y, ts }
+
+socket.on('state', s => {
+  if (selected) {
+    const sceneChanged = G && G.current_scene_id !== s.current_scene_id;
+    const list = selected.isEnemy ? (s.enemies || []) : (s.characters || []);
+    if (sceneChanged || !list.find(x => x.id === selected.id)) {
+      selected = null;
+      dragToken = null;
+    }
+  }
+  // Protect pending marker drags from being overwritten by a stale heartbeat
+  const now = Date.now();
+  for (const m of (s.markers || [])) {
+    const key = String(m.to_scene_id);
+    const p   = _pendingMarkerMoves[key];
+    if (!p) continue;
+    if (now - p.ts > 3000) { delete _pendingMarkerMoves[key]; continue; }
+    if (Math.hypot(m.x - p.x, m.y - p.y) > 5) {
+      m.x = p.x; m.y = p.y;   // server not yet confirmed — keep our position
+    } else {
+      delete _pendingMarkerMoves[key];   // server confirmed — done
+    }
+  }
+  G = s;
+  // Re-anchor pressedMarker to the new G.markers objects — G = s replaces every
+  // marker object, so the old reference no longer matches during drawMap.
+  if (pressedMarker) {
+    const sid   = pressedMarker.to_scene_id;
+    const fresh = (G.markers || []).find(m => m.to_scene_id === sid);
+    if (fresh) {
+      fresh._dragX  = pressedMarker._dragX;
+      fresh._dragY  = pressedMarker._dragY;
+      pressedMarker = fresh;
+    } else {
+      // Marker no longer exists in new state (scene changed etc.) — cancel drag
+      delete pressedMarker._dragX; delete pressedMarker._dragY;
+      pressedMarker = null; markerPressStart = null; markerDragOrig = null;
+    }
+  }
+  render(); _applyLockState();
+});
+
+function send(type, extra) {
+  socket.emit('command', Object.assign({ type }, extra || {}));
+}
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('map-canvas');
+const ctx    = canvas.getContext('2d');
+let mapImg   = new Image();
+let mapImgOk = false;
+let lastImgKey = '';
+let scale = 1, offX = 0, offY = 0;
+
+// Two view modes:
+//   'camera' — same viewport as the display screen (default, positions match exactly)
+//   'overview' — full bird's-eye map
+let viewMode = 'camera';
+
+function recomputeScale() {
+  if (!G) return;
+  const cw = canvas.width, ch = canvas.height;
+  const mw = G.map_width  || 2000;
+  const mh = G.map_height || 2000;
+  if (viewMode === 'camera') {
+    // Match the pygame viewport: scale so the game view fills the canvas
+    const vw = G.view_w || mw;
+    const vh = G.view_h || mh;
+    scale = Math.min(cw / vw, ch / vh);
+    // Map origin on canvas: world (camera_x, camera_y) → canvas (0, 0)
+    offX = -(G.camera_x || 0) * scale;
+    offY = -(G.camera_y || 0) * scale;
+  } else {
+    // Overview: fit entire map
+    scale = Math.min(cw / mw, ch / mh);
+    offX  = (cw - mw * scale) / 2;
+    offY  = (ch - mh * scale) / 2;
+  }
+}
+
+function w2c(wx, wy)  { return [wx * scale + offX, wy * scale + offY]; }
+function c2w(cx, cy)  { return [(cx - offX) / scale, (cy - offY) / scale]; }
+
+function hpColor(ratio) {
+  if (ratio > .5)  return '#22c55e';
+  if (ratio > .25) return '#f59e0b';
+  return '#ef4444';
+}
+
+function conditionChips(codes) {
+  if (!codes || !codes.length) return '';
+  return '<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:3px;">' +
+    codes.map(c => {
+      const info = CONDITIONS[c];
+      if (!info) return '';
+      const fg = '#000';
+      return `<span style="background:${info.color};color:${fg};font-size:9px;padding:1px 4px;border-radius:3px;font-weight:bold;white-space:nowrap;">${info.name}</span>`;
+    }).join('') +
+  '</div>';
+}
+
+let _hpTarget = null;
+let _hpIsDamage = true;
+
+function _findEnt(id, isEnemy) {
+  const pool = isEnemy ? (G.enemies || []) : (G.characters || []);
+  return pool.find(e => e.id === id) || null;
+}
+
+function openHpModal(id, isEnemy, name, isDamage) {
+  const ent = _findEnt(id, isEnemy);
+  if (!ent) return;
+  _hpTarget   = {id, isEnemy, hp: ent.hp, max_hp: ent.max_hp};
+  _hpIsDamage = (isDamage === undefined) ? true : isDamage;
+  document.getElementById('hp-modal-name').textContent = name;
+  document.getElementById('hp-modal-cur').textContent  = ent.hp + ' / ' + ent.max_hp + ' HP';
+  const actionEl = document.getElementById('hp-modal-action');
+  if (isDamage === undefined) {
+    actionEl.textContent = ''; actionEl.style.color = '';
+  } else if (isDamage) {
+    actionEl.textContent = 'Subtract HP'; actionEl.style.color = '#fca5a5';
+  } else {
+    actionEl.textContent = 'Add HP'; actionEl.style.color = '#86efac';
+  }
+  document.getElementById('hp-modal-amt').value = '';
+  document.getElementById('hp-modal').style.display = 'flex';
+  document.getElementById('hp-modal-amt').focus();
+}
+
+function applyHpModal(isDamage) {
+  if (!_hpTarget) return;
+  const amt = parseInt(document.getElementById('hp-modal-amt').value, 10);
+  if (!Number.isFinite(amt) || amt < 0) return;
+  const newHp = isDamage
+    ? Math.max(0, _hpTarget.hp - amt)
+    : Math.min(_hpTarget.max_hp, _hpTarget.hp + amt);
+  send('set_hp', {entity_id: _hpTarget.id, is_enemy: _hpTarget.isEnemy, hp: newHp});
+  closeHpModal();
+}
+
+function closeHpModal() {
+  document.getElementById('hp-modal').style.display = 'none';
+  _hpTarget = null;
+}
+
+// ── Group Damage / Heal ───────────────────────────────────────────────────────
+let _groupHpSelected  = new Set();   // Set of "id:isEnemy" strings
+let _groupHpIsDamage  = true;
+
+function _visibleOrder() {
+  return G ? (G.visible_initiative_order || G.initiative_order || []) : [];
+}
+
+function openGroupHpModal(isDamage) {
+  const order = _visibleOrder();
+  if (!order.length) { alert('No visible combatants — roll initiative first.'); return; }
+  _groupHpIsDamage = isDamage;
+  _groupHpSelected = new Set(order.map(e => e.id + ':' + e.is_enemy));
+  _renderGroupHpList();
+  document.getElementById('group-hp-amt').value = '';
+  const m = document.getElementById('group-hp-modal');
+  m.style.display = 'flex';
+  setTimeout(() => document.getElementById('group-hp-amt').focus(), 50);
+}
+
+function _renderGroupHpList() {
+  const order = _visibleOrder();
+  const el    = document.getElementById('group-hp-list');
+  el.innerHTML = '';
+  order.forEach(e => {
+    const key     = e.id + ':' + e.is_enemy;
+    const checked = _groupHpSelected.has(key);
+    const ratio   = e.max_hp > 0 ? e.hp / e.max_hp : 0;
+    const pct     = Math.round(ratio * 100);
+    const typeTag = e.is_enemy ? 'Enemy' : (e.is_npc ? 'NPC' : 'Player');
+    const tagBg   = e.is_enemy ? '#7f1d1d' : (e.is_npc ? '#1e3a8a' : '#14532d');
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;align-items:center;gap:8px;padding:7px 10px;
+      border-bottom:1px solid #1f2937;cursor:pointer;
+      background:${checked ? '#0f2d1a' : 'transparent'};`;
+    row.innerHTML =
+      `<input type="checkbox" ${checked ? 'checked' : ''} style="width:15px;height:15px;flex-shrink:0;cursor:pointer;"
+         onchange="groupHpToggle('${key}',this.checked)">` +
+      `<span style="background:${tagBg};color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;flex-shrink:0;">${typeTag}</span>` +
+      `<span style="flex:1;font-size:13px;color:${checked?'#f9fafb':'#6b7280'};">${esc(e.name)}</span>` +
+      `<div style="text-align:right;flex-shrink:0;">
+         <div style="font-size:12px;color:#9ca3af;">${e.hp}/${e.max_hp}</div>
+         <div style="width:56px;height:4px;background:#374151;border-radius:2px;margin-top:2px;">
+           <div style="width:${pct}%;height:100%;background:${hpColor(ratio)};border-radius:2px;"></div>
+         </div>
+       </div>`;
+    el.appendChild(row);
+  });
+}
+
+function groupHpToggle(key, checked) {
+  if (checked) _groupHpSelected.add(key);
+  else         _groupHpSelected.delete(key);
+  _renderGroupHpList();
+}
+
+function groupHpSelectAll() {
+  const order = _visibleOrder();
+  _groupHpSelected = new Set(order.map(e => e.id + ':' + e.is_enemy));
+  _renderGroupHpList();
+}
+
+function groupHpSelectNone() {
+  _groupHpSelected.clear();
+  _renderGroupHpList();
+}
+
+function applyGroupHp(isDamage) {
+  const amt = parseInt(document.getElementById('group-hp-amt').value, 10);
+  if (!Number.isFinite(amt) || amt < 0) { alert('Please enter a valid amount.'); return; }
+  if (_groupHpSelected.size === 0)      { alert('No targets selected.');          return; }
+  const targets = [..._groupHpSelected].map(key => {
+    const [id, ie] = key.split(':');
+    return { entity_id: parseInt(id, 10), is_enemy: ie === 'true' };
+  });
+  send('group_hp', { targets, amount: amt, is_damage: isDamage });
+  closeGroupHpModal();
+}
+
+function closeGroupHpModal() {
+  document.getElementById('group-hp-modal').style.display = 'none';
+}
+
+
+function drawMap() {
+  const cw = canvas.width, ch = canvas.height;
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#0d0e14';
+  ctx.fillRect(0, 0, cw, ch);
+
+  if (!G) return;
+  recomputeScale();
+
+  // Background map image
+  if (mapImgOk) {
+    ctx.drawImage(mapImg, offX, offY, G.map_width * scale, G.map_height * scale);
+  }
+
+  // Fog of war
+  if (G.fog_on) {
+    const fw = G.map_width  * scale;
+    const fh = G.map_height * scale;
+    const fogC = document.createElement('canvas');
+    fogC.width  = fw;
+    fogC.height = fh;
+    const fc = fogC.getContext('2d');
+    fc.fillStyle = 'rgba(0,0,0,0.40)';
+    fc.fillRect(0, 0, fw, fh);
+    if (G.characters && G.vision_radius) {
+      const vr  = G.vision_radius  * scale;
+      const vrd = (G.vision_radius + (G.vision_dim || 0)) * scale;
+      fc.globalCompositeOperation = 'destination-out';
+      for (const ch of G.characters) {
+        const cx = ch.x * scale;
+        const cy = ch.y * scale;
+        // dim penumbra ring
+        const grd = fc.createRadialGradient(cx, cy, vr * 0.85, cx, cy, vrd);
+        grd.addColorStop(0, 'rgba(0,0,0,1)');
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        fc.fillStyle = grd;
+        fc.beginPath(); fc.arc(cx, cy, vrd, 0, Math.PI * 2); fc.fill();
+        // bright core
+        fc.fillStyle = 'rgba(0,0,0,1)';
+        fc.beginPath(); fc.arc(cx, cy, vr * 0.85, 0, Math.PI * 2); fc.fill();
+      }
+      fc.globalCompositeOperation = 'source-over';
+    }
+    ctx.drawImage(fogC, offX, offY);
+  }
+
+  // In overview mode draw a viewport rectangle showing what the display sees
+  if (viewMode === 'overview' && G.camera_x !== undefined) {
+    const [vx1, vy1] = w2c(G.camera_x, G.camera_y);
+    const vw = (G.view_w || 800) * scale;
+    const vh = (G.view_h || 600) * scale;
+    ctx.strokeStyle = '#f0a500';
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([6, 3]);
+    ctx.strokeRect(vx1, vy1, vw, vh);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(240,165,0,0.06)';
+    ctx.fillRect(vx1, vy1, vw, vh);
+  }
+
+  // Sound zones (drawn beneath markers and tokens)
+  for (const z of (G.sound_zones || [])) {
+    const [sx, sy] = w2c(z.x, z.y);
+    const [ex, ey] = w2c(z.x + z.w, z.y + z.h);
+    const zw = ex - sx, zh = ey - sy;
+    const isActive = G.active_zone_id === z.id;
+    const h = z.color.replace('#','');
+    const r2 = parseInt(h.slice(0,2),16), g2 = parseInt(h.slice(2,4),16), b2 = parseInt(h.slice(4,6),16);
+    ctx.fillStyle = `rgba(${r2},${g2},${b2},${isActive ? 0.22 : 0.12})`;
+    ctx.fillRect(sx, sy, zw, zh);
+    ctx.strokeStyle = isActive ? '#ffe600' : z.color;
+    ctx.lineWidth = isActive ? 3 : 1.5;
+    ctx.setLineDash(isActive ? [] : [8, 4]);
+    ctx.strokeRect(sx, sy, zw, zh);
+    ctx.setLineDash([]);
+    // Label
+    const fz = Math.max(9, Math.round(11 * scale));
+    ctx.font = `bold ${fz}px sans-serif`;
+    ctx.fillStyle = isActive ? '#ffe600' : z.color;
+    ctx.textAlign = 'center';
+    ctx.fillText('♫ ' + z.name, sx + zw / 2, sy + zh / 2 + fz / 3);
+    ctx.textAlign = 'left';
+  }
+  // Zone draw preview
+  if (zoneDraw && zoneDrawStart && zoneDrawCur) {
+    const [sx0, sy0] = w2c(zoneDrawStart[0], zoneDrawStart[1]);
+    const [sx1, sy1] = w2c(zoneDrawCur[0],   zoneDrawCur[1]);
+    const pw = sx1 - sx0, ph = sy1 - sy0;
+    ctx.fillStyle = 'rgba(68,136,255,0.15)';
+    ctx.fillRect(sx0, sy0, pw, ph);
+    ctx.strokeStyle = '#88bbff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 3]);
+    ctx.strokeRect(sx0, sy0, pw, ph);
+    ctx.setLineDash([]);
+  }
+
+  // Scene markers
+  for (const m of (G.markers || [])) {
+    const draggingThis = pressedMarker && markerDragOrig &&
+                         m === pressedMarker && markerPressStart;
+    const wx = draggingThis ? m._dragX ?? m.x : m.x;
+    const wy = draggingThis ? m._dragY ?? m.y : m.y;
+    const [sx, sy] = w2c(wx, wy);
+    const r = Math.max(8, 22 * scale);
+    const temporary = (m.id === null || m.id === undefined);
+    const hovered   = !temporary && m.id === hoveredMarkerId;
+
+    if (temporary) {
+      // Amber/gold return portal — matches pygame entities.py temporary style
+      ctx.beginPath();
+      ctx.arc(sx, sy, r + 4 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(80,50,0,0.85)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#d29614';
+      ctx.fill();
+
+      // Dotted inner ring (8 dots)
+      for (let i = 0; i < 8; i++) {
+        const ang = i * Math.PI / 4;
+        const dr  = (r - 7 * scale);
+        ctx.beginPath();
+        ctx.arc(sx + Math.cos(ang) * dr, sy + Math.sin(ang) * dr,
+                Math.max(2, 2 * scale), 0, Math.PI * 2);
+        ctx.fillStyle = '#ffdc78';
+        ctx.fill();
+      }
+
+      // Back-arrow chevron pointing left
+      const a = r * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(sx + a, sy - a * 1.15);
+      ctx.lineTo(sx - a, sy);
+      ctx.lineTo(sx + a, sy + a * 1.15);
+      ctx.strokeStyle = '#3c1e00';
+      ctx.lineWidth = Math.max(1.5, 3 * scale);
+      ctx.stroke();
+
+      // Label
+      const fSize = Math.max(9, Math.round(11 * scale));
+      ctx.font = `bold ${fSize}px sans-serif`;
+      const lw = ctx.measureText(m.to_scene_name).width;
+      const lx = sx - lw / 2;
+      const ly = sy + r + 4 * scale + fSize;
+      ctx.fillStyle = '#3c2800';
+      ctx.fillRect(lx - 3, ly - fSize, lw + 6, fSize + 4);
+      ctx.fillStyle = '#ffe6a0';
+      ctx.fillText(m.to_scene_name, lx, ly);
+
+    } else {
+      // Teal permanent portal
+      ctx.beginPath();
+      ctx.arc(sx, sy, r + (hovered ? 7 : 4) * scale, 0, Math.PI * 2);
+      ctx.fillStyle = hovered ? 'rgba(0,220,200,0.35)' : 'rgba(0,60,70,0.8)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = hovered ? '#00ffe8' : '#00c3b4';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, r - 7 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = hovered ? '#ffffff' : '#b4fff5';
+      ctx.lineWidth = hovered ? 3 : 2;
+      ctx.stroke();
+
+      // Forward chevron pointing right
+      const a = r * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(sx - a, sy - a * 1.15);
+      ctx.lineTo(sx + a, sy);
+      ctx.lineTo(sx - a, sy + a * 1.15);
+      ctx.strokeStyle = '#001e28';
+      ctx.lineWidth = Math.max(1.5, 3 * scale);
+      ctx.stroke();
+
+      // Label
+      const fSize = Math.max(9, Math.round(11 * scale));
+      ctx.font = `bold ${fSize}px sans-serif`;
+      const lw = ctx.measureText(m.to_scene_name).width;
+      const lx = sx - lw / 2;
+      const ly = sy + r + 4 * scale + fSize;
+      ctx.fillStyle = '#001e28';
+      ctx.fillRect(lx - 3, ly - fSize, lw + 6, fSize + 4);
+      ctx.fillStyle = '#dcfff8';
+      ctx.fillText(m.to_scene_name, lx, ly);
+    }
+  }
+
+  // Hidden items (unfound) — small red dot, matches pygame GUI
+  for (const item of (G.hidden_items || [])) {
+    const [sx, sy] = w2c(item.x, item.y);
+    ctx.beginPath();
+    ctx.arc(sx, sy, Math.max(5, 5 * scale), 0, Math.PI * 2);
+    ctx.fillStyle = '#dc3232';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx, sy, Math.max(3, 3 * scale), 0, Math.PI * 2);
+    ctx.fillStyle = '#ff9696';
+    ctx.fill();
+    // Detection radius ring
+    ctx.beginPath();
+    ctx.arc(sx, sy, item.radius * scale, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(220,50,50,0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Traps — "T" label in red, matches pygame GUI
+  for (const trap of (G.traps || [])) {
+    const [sx, sy] = w2c(trap.x, trap.y);
+    const fSize = Math.max(11, Math.round(14 * scale));
+    ctx.font = `bold ${fSize}px sans-serif`;
+    const col = trap.triggered ? '#ff4444' : '#dc3232';
+    // Detection radius ring
+    ctx.beginPath();
+    ctx.arc(sx, sy, trap.radius * scale, 0, Math.PI * 2);
+    ctx.strokeStyle = trap.triggered ? 'rgba(255,68,68,0.35)' : 'rgba(220,50,50,0.2)';
+    ctx.lineWidth = trap.triggered ? 2 : 1;
+    ctx.stroke();
+    // T label
+    ctx.fillStyle = col;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('T', sx, sy);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // All tokens
+  const all = [
+    ...(G.characters || []).map(c => ({ ...c, isEnemy: false })),
+    ...(G.enemies    || []).map(e => ({ ...e, isEnemy: true  })),
+  ];
+  for (const t of all) {
+    const [sx, sy] = w2c(t.x, t.y);
+    const r = Math.max(5, (t.size || 20) * scale);
+    const isSel = selected && selected.id === t.id && selected.isEnemy === t.isEnemy;
+
+    if (isSel) {
+      ctx.save();
+      ctx.shadowColor = '#f0a500';
+      ctx.shadowBlur  = 10;
+    }
+    const tImg = tokenImg(t, t.isEnemy);
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    if (tImg) {
+      // Clip to circle, draw image inside
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(tImg, sx - r, sy - r, r * 2, r * 2);
+      ctx.restore();
+      // Colored border ring
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = Math.max(2, 3 * scale);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = t.color;
+      ctx.fill();
+    }
+    if (isSel) { ctx.restore(); ctx.strokeStyle = '#f0a500'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, r + 2, 0, Math.PI * 2); ctx.stroke(); }
+    else if (tImg) { /* border already drawn above */ }
+
+    // HP ring
+    if (t.max_hp > 0) {
+      const ratio = Math.max(0, t.hp / t.max_hp);
+      ctx.beginPath();
+      ctx.arc(sx, sy, r + 2.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ratio);
+      ctx.strokeStyle = hpColor(ratio);
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
+    // Name label
+    const fSize = Math.max(9, Math.round(11 * scale));
+    ctx.font = `${fSize}px sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(t.name, sx, sy - r - 3);
+    ctx.textAlign = 'left';
+
+    // Condition chips (above name label)
+    const conds = (t.conditions || []).slice().sort();
+    if (conds.length) {
+      const chip = Math.max(10, Math.round(13 * scale));
+      const gap  = 1;
+      const total = conds.length * (chip + gap) - gap;
+      let cx2 = sx - total / 2;
+      const cy2 = sy - r - fSize - chip - 5;
+      ctx.font = `bold ${Math.max(7, Math.round(8 * scale))}px sans-serif`;
+      ctx.textAlign = 'center';
+      for (const code of conds) {
+        const info = CONDITIONS[code];
+        if (!info) { cx2 += chip + gap; continue; }
+        ctx.fillStyle = info.color;
+        ctx.fillRect(cx2, cy2, chip, chip);
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(cx2, cy2, chip, chip);
+        ctx.fillStyle = '#000000';
+        ctx.fillText(info.abbr, cx2 + chip / 2, cy2 + chip - 2);
+        cx2 += chip + gap;
+      }
+      ctx.textAlign = 'left';
+    }
+  }
+}
+
+function markerAt(cx, cy) {
+  if (!G) return null;
+  for (const m of (G.markers || [])) {
+    const [sx, sy] = w2c(m.x, m.y);
+    const r = Math.max(8, 22 * scale) + 6;   // matches draw radius + small padding
+    if ((cx - sx) ** 2 + (cy - sy) ** 2 <= r * r) return m;
+  }
+  return null;
+}
+
+function tokenAt(cx, cy) {
+  if (!G) return null;
+  const all = [
+    ...(G.characters || []).map(c => ({ ...c, isEnemy: false })),
+    ...(G.enemies    || []).map(e => ({ ...e, isEnemy: true  })),
+  ];
+  for (let i = all.length - 1; i >= 0; i--) {
+    const t = all[i];
+    const [sx, sy] = w2c(t.x, t.y);
+    const r = Math.max(5, (t.size || 20) * scale) + 5;
+    if ((cx - sx) ** 2 + (cy - sy) ** 2 <= r * r) return t;
+  }
+  return null;
+}
+
+// ── Canvas pointer events ─────────────────────────────────────────────────────
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  if (e.touches) {
+    return [e.touches[0].clientX - r.left, e.touches[0].clientY - r.top];
+  }
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+
+function partyCentroid() {
+  const party = (G && G.characters || []).filter(c => !c.is_npc);
+  if (!party.length) return null;
+  return [
+    party.reduce((s, c) => s + c.x, 0) / party.length,
+    party.reduce((s, c) => s + c.y, 0) / party.length,
+  ];
+}
+
+canvas.addEventListener('mousedown', e => {
+  const [cx, cy] = canvasXY(e);
+
+  if (zoneDraw) {
+    zoneDrawStart = c2w(cx, cy);
+    zoneDrawCur   = c2w(cx, cy);
+    e.preventDefault();
+    return;
+  }
+
+  // Scene markers are always interactive regardless of mode
+  const marker = markerAt(cx, cy);
+  if (marker) {
+    pressedMarker    = marker;
+    markerPressStart = [cx, cy];
+    markerDragOrig   = { x: marker.x, y: marker.y };
+    e.preventDefault();
+    return;
+  }
+
+  const hit = tokenAt(cx, cy);
+
+  if (partyMoveMode) {
+    // Non-party tokens (enemies, NPCs) are still draggable individually
+    if (hit && (hit.isEnemy || hit.is_npc)) {
+      selected  = { id: hit.id, isEnemy: hit.isEnemy, name: hit.name };
+      dragToken = hit;
+      drawMap();
+      refreshSelPanel();
+      e.preventDefault();
+      return;
+    }
+    // Party member click or empty space — move whole party
+    dragToken         = null;
+    partyDragStart    = [cx, cy];
+    partyInitCentroid = partyCentroid();
+    e.preventDefault();
+    return;
+  }
+
+  if (hit) {
+    // Token takes priority — start a drag; if it's dropped on a marker, mouseup handles it
+    selected  = { id: hit.id, isEnemy: hit.isEnemy, name: hit.name };
+    dragToken = hit;
+    drawMap();
+    refreshSelPanel();
+    e.preventDefault();
+    return;
+  }
+
+  if (selected) {
+    const [wx, wy] = c2w(cx, cy);
+    send('move_entity', { entity_id: selected.id, is_enemy: selected.isEnemy,
+                          x: Math.round(wx), y: Math.round(wy) });
+  } else if (viewMode === 'overview') {
+    // Empty-space click in overview — start camera pan drag
+    cameraDragStart = { cx, cy, camX: G.camera_x || 0, camY: G.camera_y || 0 };
+    canvas.style.cursor = 'grabbing';
+  }
+  drawMap();
+  refreshSelPanel();
+  e.preventDefault();
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (viewMode === 'overview') {
+    const [cx, cy] = canvasXY(e);
+    if (cameraDragStart) {
+      const dx = (cx - cameraDragStart.cx) / scale;
+      const dy = (cy - cameraDragStart.cy) / scale;
+      const now = Date.now();
+      if (now - dragThrottle >= DRAG_THROTTLE_MS) {
+        send('move_camera', { x: cameraDragStart.camX + dx, y: cameraDragStart.camY + dy });
+        dragThrottle = now;
+      }
+    } else {
+      // Show grab cursor when hovering the viewport box
+      if (G && G.camera_x !== undefined) {
+        const [vx1, vy1] = w2c(G.camera_x, G.camera_y);
+        const vw = (G.view_w || 800) * scale;
+        const vh = (G.view_h || 600) * scale;
+        const inside = cx >= vx1 && cx <= vx1 + vw && cy >= vy1 && cy <= vy1 + vh;
+        canvas.style.cursor = inside ? 'grab' : 'default';
+      }
+    }
+    return;
+  }
+
+  if (zoneDraw && zoneDrawStart) {
+    zoneDrawCur = c2w(...canvasXY(e));
+    drawMap();
+    return;
+  }
+
+  {
+    const [cx, cy] = canvasXY(e);
+
+    // Drag the pressed marker to a new position
+    if (pressedMarker && markerPressStart && markerDragOrig) {
+      const dx = (cx - markerPressStart[0]) / scale;
+      const dy = (cy - markerPressStart[1]) / scale;
+      pressedMarker._dragX = markerDragOrig.x + dx;
+      pressedMarker._dragY = markerDragOrig.y + dy;
+      canvas.style.cursor = 'grabbing';
+      drawMap();
+      return;
+    }
+
+    const hm = markerAt(cx, cy);
+    // Use a sentinel for transient markers (id=null) so hover tracking doesn't
+    // conflate them with "no hovered marker" (also null).
+    const newId = hm ? (hm.id !== null && hm.id !== undefined ? hm.id : '__transient__') : null;
+    if (!partyMoveMode && !dragToken) {
+      if (newId !== hoveredMarkerId) {
+        hoveredMarkerId = newId;
+        drawMap();
+      }
+    }
+    // Show pointer cursor over markers even while dragging a token
+    canvas.style.cursor = hm ? 'pointer' : (dragToken ? 'grabbing' : 'default');
+  }
+
+  if (partyMoveMode && partyDragStart) {
+    if (partyInitCentroid) {
+      const [cx, cy] = canvasXY(e);
+      const dx = (cx - partyDragStart[0]) / scale;
+      const dy = (cy - partyDragStart[1]) / scale;
+      const tx = partyInitCentroid[0] + dx;
+      const ty = partyInitCentroid[1] + dy;
+      const now = Date.now();
+      if (now - dragThrottle >= DRAG_THROTTLE_MS) {
+        send('move_party', { x: tx, y: ty });
+        dragThrottle = now;
+      }
+    }
+    return;
+  }
+
+  if (!dragToken) return;
+  const [cx, cy] = canvasXY(e);
+  const [wx, wy] = c2w(cx, cy);
+  const now = Date.now();
+  if (now - dragThrottle >= DRAG_THROTTLE_MS) {
+    send('move_entity', { entity_id: dragToken.id, is_enemy: dragToken.isEnemy,
+                          x: Math.round(wx), y: Math.round(wy) });
+    dragThrottle = now;
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (cameraDragStart) {
+    cameraDragStart = null;
+    canvas.style.cursor = 'grab';
+    return;
+  }
+
+  // Resolve marker press: tap (<8px) → switch scene; drag → reposition
+  if (pressedMarker && markerPressStart) {
+    const [cx, cy] = canvasXY(e);
+    const moved = Math.hypot(cx - markerPressStart[0], cy - markerPressStart[1]);
+    if (moved < 8) {
+      // Tap — activate portal
+      delete pressedMarker._dragX; delete pressedMarker._dragY;
+      send('switch_scene', { scene_id: pressedMarker.to_scene_id, from_marker: true });
+    } else {
+      // Drag — commit new world position
+      const newX = markerDragOrig.x + (cx - markerPressStart[0]) / scale;
+      const newY = markerDragOrig.y + (cy - markerPressStart[1]) / scale;
+      pressedMarker.x = newX;
+      pressedMarker.y = newY;
+      delete pressedMarker._dragX; delete pressedMarker._dragY;
+      const rx = Math.round(newX), ry = Math.round(newY);
+      // Shield this position from stale heartbeat state until server confirms
+      _pendingMarkerMoves[String(pressedMarker.to_scene_id)] = { x: rx, y: ry, ts: Date.now() };
+      // Persist for permanent markers; transient ones update in-memory only
+      send('move_marker', { marker_id: pressedMarker.id,
+                            to_scene_id: pressedMarker.to_scene_id,
+                            x: rx, y: ry });
+      drawMap();
+    }
+    pressedMarker = null; markerPressStart = null; markerDragOrig = null;
+    return;
+  }
+
+  if (zoneDraw && zoneDrawStart && zoneDrawCur) {
+    const [x0, y0] = zoneDrawStart;
+    const [x1, y1] = zoneDrawCur;
+    const bounds = {
+      x: Math.min(x0, x1), y: Math.min(y0, y1),
+      w: Math.abs(x1 - x0), h: Math.abs(y1 - y0)
+    };
+    zoneDrawStart = null; zoneDrawCur = null;
+    // Exit draw mode
+    zoneDraw = false;
+    const btn = document.getElementById('zone-draw-btn');
+    if (btn) { btn.textContent = '+ Add Zone'; btn.style.background = '#1e3a5f'; }
+    canvas.style.cursor = 'default';
+    if (bounds.w > 20 && bounds.h > 20) openZoneModal(bounds);
+    drawMap();
+    return;
+  }
+
+  if (partyMoveMode && partyDragStart) {
+    const [cx, cy] = canvasXY(e);
+    const dragged = Math.abs(cx - partyDragStart[0]) > 5 || Math.abs(cy - partyDragStart[1]) > 5;
+    if (!dragged) {
+      // Tap (not a drag) — check for scene marker first, then click-to-move
+      const marker = markerAt(cx, cy);
+      if (marker) {
+        send('switch_scene', { scene_id: marker.to_scene_id, from_marker: true });
+        partyDragStart = null; partyInitCentroid = null;
+        return;
+      }
+      const [wx, wy] = c2w(cx, cy);
+      send('move_party', { x: wx, y: wy });
+    } else if (partyInitCentroid) {
+      // Drag — always move party, never portal (accidental release near marker)
+      const dx = (cx - partyDragStart[0]) / scale;
+      const dy = (cy - partyDragStart[1]) / scale;
+      send('move_party', { x: partyInitCentroid[0] + dx, y: partyInitCentroid[1] + dy });
+    }
+    partyDragStart    = null;
+    partyInitCentroid = null;
+    return;
+  }
+
+  if (dragToken) {
+    const [cx, cy] = canvasXY(e);
+    const marker = markerAt(cx, cy);
+    if (marker) {
+      send('switch_scene', { scene_id: marker.to_scene_id, from_marker: true });
+    } else {
+      const [wx, wy] = c2w(cx, cy);
+      send('move_entity', { entity_id: dragToken.id, is_enemy: dragToken.isEnemy,
+                            x: Math.round(wx), y: Math.round(wy) });
+    }
+    dragToken = null;
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  dragToken         = null;
+  partyDragStart    = null;
+  partyInitCentroid = null;
+  hoveredMarkerId   = null;
+  if (pressedMarker) { delete pressedMarker._dragX; delete pressedMarker._dragY; }
+  pressedMarker     = null;
+  markerPressStart  = null;
+  markerDragOrig    = null;
+  if (!zoneDraw) canvas.style.cursor = 'default';
+});
+
+// Touch support (tablet)
+canvas.addEventListener('touchstart',  e => { canvas.dispatchEvent(Object.assign(new MouseEvent('mousedown'), {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, preventDefault: () => e.preventDefault()})); }, { passive: false });
+canvas.addEventListener('touchmove',   e => { canvas.dispatchEvent(Object.assign(new MouseEvent('mousemove'), {clientX: e.touches[0].clientX, clientY: e.touches[0].clientY})); e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchend',    e => { canvas.dispatchEvent(new MouseEvent('mouseup')); });
+
+// ── Responsive canvas resize ──────────────────────────────────────────────────
+const ro = new ResizeObserver(() => {
+  const r = canvas.getBoundingClientRect();
+  canvas.width  = Math.round(r.width);
+  canvas.height = Math.round(r.height);
+  drawMap();
+});
+ro.observe(canvas);
+
+// ── Render all panels ─────────────────────────────────────────────────────────
+function render() {
+  if (!G) return;
+
+  // Reload map image when scene changes
+  const imgKey = `${G.current_scene_id}-${G.map_width}-${G.map_height}`;
+  if (imgKey !== lastImgKey) {
+    lastImgKey = imgKey;
+    mapImgOk   = false;
+    const fresh = new Image();
+    fresh.onload  = () => { mapImg = fresh; mapImgOk = true; drawMap(); };
+    fresh.onerror = () => { mapImgOk = false; drawMap(); };
+    fresh.src = `/map-image?t=${G.current_scene_id}`;
+  }
+
+  drawMap();
+  renderScenes();
+  renderInitiative();
+  renderCharacters();
+  renderEnemies();
+  refreshFogBtn();
+  refreshSelPanel();
+  refreshCampaignDisplay();
+  renderZoneList();
+  updateZoneAudio(G);
+  renderSceneNotes();
+}
+
+function renderSceneNotes() {
+  const panel = document.getElementById('notes-panel');
+  const body  = document.getElementById('notes-body');
+  if (!panel || !body) return;
+  const text = (G && G.scene_notes) ? G.scene_notes.trim() : '';
+  if (text) {
+    body.textContent = text;
+    panel.style.display = '';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+// ── Sound zones ───────────────────────────────────────────────────────────────
+const ZONE_PALETTE_WEB = ['#4488ff','#44cc66','#cc44cc','#ff8822','#ff4444','#ffcc22'];
+let zoneDraw      = false;
+let zoneDrawStart = null;   // [wx, wy] world coords on mousedown
+let zoneDrawCur   = null;   // [wx, wy] live cursor world pos
+let zonePendingBounds   = null; // {x,y,w,h} set when draw completes, cleared on modal close
+let isPendingDefault    = false; // true when zone modal is editing the ambient default track
+let zoneSelectedColor = ZONE_PALETTE_WEB[0];
+
+// Build color swatches inside the modal
+(function() {
+  const el = document.getElementById('zone-color-swatches');
+  if (!el) return;
+  ZONE_PALETTE_WEB.forEach(col => {
+    const b = document.createElement('div');
+    b.style.cssText = `width:28px;height:28px;border-radius:5px;background:${col};cursor:pointer;border:2px solid transparent;`;
+    b.dataset.color = col;
+    b.onclick = () => {
+      zoneSelectedColor = col;
+      document.querySelectorAll('#zone-color-swatches div').forEach(d => {
+        d.style.border = d.dataset.color === col ? '2px solid #fff' : '2px solid transparent';
+      });
+    };
+    el.appendChild(b);
+  });
+  el.firstChild && (el.firstChild.style.border = '2px solid #fff');
+})();
+
+function toggleZoneDraw() {
+  zoneDraw = !zoneDraw;
+  const btn = document.getElementById('zone-draw-btn');
+  if (zoneDraw) {
+    btn.textContent = '✕ Cancel'; btn.style.background = '#7f1d1d';
+    canvas.style.cursor = 'crosshair';
+  } else {
+    btn.textContent = '+ Add Zone'; btn.style.background = '#1e3a5f';
+    canvas.style.cursor = 'default';
+    zoneDrawStart = null; zoneDrawCur = null;
+  }
+  drawMap();
+}
+
+function openZoneModal(bounds, opts) {
+  isPendingDefault  = !!(opts && opts.isDefault);
+  zonePendingBounds = isPendingDefault ? {x:0, y:0, w:0, h:0} : bounds;
+  document.getElementById('zone-modal-title').textContent =
+    isPendingDefault ? 'Ambient / Default Track' : 'New Sound Zone';
+  document.getElementById('zone-name-inp').value  = (opts && opts.name)  || (isPendingDefault ? 'Ambient' : 'New Zone');
+  document.getElementById('zone-track-inp').value = (opts && opts.track) || '';
+  document.getElementById('zone-modal-err').textContent = '';
+  // Pre-select color swatch if provided
+  if (opts && opts.color) {
+    zoneSelectedColor = opts.color;
+    document.querySelectorAll('#zone-color-swatches div').forEach(d => {
+      d.style.border = d.dataset.color === opts.color ? '2px solid #fff' : '2px solid transparent';
+    });
+  }
+  const modal = document.getElementById('zone-modal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('zone-name-inp').focus(), 50);
+}
+
+function closeZoneModal() {
+  document.getElementById('zone-modal').style.display = 'none';
+  zonePendingBounds = null;
+  isPendingDefault  = false;
+}
+
+function editDefaultZone() {
+  const dz = G && G.default_zone;
+  openZoneModal(null, { isDefault: true, name: dz && dz.name, track: dz && dz.track, color: dz && dz.color });
+}
+
+async function clearDefaultZone() {
+  if (!confirm('Clear the ambient/default track?')) return;
+  await fetch(`/api/default-zone?scene_id=${G ? G.current_scene_id : 0}`, { method: 'DELETE' });
+}
+
+async function submitZone() {
+  const err   = document.getElementById('zone-modal-err');
+  const name  = document.getElementById('zone-name-inp').value.trim() || (isPendingDefault ? 'Ambient' : 'Zone');
+  const track = document.getElementById('zone-track-inp').value.trim();
+  err.textContent = '';
+  try {
+    let r;
+    if (isPendingDefault) {
+      r = await fetch('/api/default-zone', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, track, color: zoneSelectedColor,
+                               scene_id: G ? G.current_scene_id : 0 })
+      });
+    } else {
+      if (!zonePendingBounds) { err.textContent = 'Draw a zone on the map first.'; return; }
+      r = await fetch('/api/sound-zones', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ ...zonePendingBounds, name, track,
+                               color: zoneSelectedColor,
+                               scene_id: G ? G.current_scene_id : 0 })
+      });
+    }
+    const data = await r.json();
+    if (!r.ok) { err.textContent = data.error || 'Error saving.'; return; }
+    closeZoneModal();
+  } catch(e) { err.textContent = 'Network error.'; }
+}
+
+async function deleteZone(id) {
+  if (!confirm('Delete this sound zone?')) return;
+  await fetch(`/api/sound-zones/${id}`, { method: 'DELETE' });
+}
+
+// ── Tabletop Audio browser ────────────────────────────────────────────────────
+let _ttaTracks = null;
+
+async function openTTABrowser() {
+  const modal = document.getElementById('tta-modal');
+  modal.style.display = 'flex';
+  if (_ttaTracks === null) {
+    document.getElementById('tta-status').textContent = 'Loading tracks from Tabletop Audio…';
+    document.getElementById('tta-list').innerHTML = '';
+    try {
+      const r = await fetch('/api/tta-tracks');
+      const d = await r.json();
+      _ttaTracks = d.tracks || [];
+    } catch(e) {
+      document.getElementById('tta-status').textContent = 'Failed to load tracks.';
+      _ttaTracks = [];
+    }
+  }
+  filterTTAList();
+  setTimeout(() => document.getElementById('tta-search').focus(), 50);
+}
+
+function closeTTABrowser() {
+  document.getElementById('tta-modal').style.display = 'none';
+}
+
+function filterTTAList() {
+  const q = (document.getElementById('tta-search').value || '').toLowerCase();
+  const all = _ttaTracks || [];
+  const filtered = q ? all.filter(t => t.title.toLowerCase().includes(q)) : all;
+  document.getElementById('tta-status').textContent =
+    _ttaTracks === null ? '' : `${filtered.length} track${filtered.length !== 1 ? 's' : ''}`;
+  const el = document.getElementById('tta-list');
+  el.innerHTML = '';
+  filtered.slice(0, 300).forEach(t => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #1e3a5f;';
+
+    const playBtn = document.createElement('button');
+    playBtn.textContent = '▶';
+    playBtn.title = 'Preview on game display';
+    playBtn.style.cssText = 'background:#1e3a5f;border:1px solid #1e40af;color:#93c5fd;border-radius:3px;'+
+      'padding:2px 8px;cursor:pointer;font-size:11px;flex-shrink:0;';
+    playBtn.onmouseenter = () => playBtn.style.background = '#2d4a7f';
+    playBtn.onmouseleave = () => playBtn.style.background = '#1e3a5f';
+    playBtn.onclick = () => send('preview_track', { url: t.url });
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = t.title;
+    nameSpan.style.cssText = 'flex:1;font-size:13px;color:#d1d5db;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    nameSpan.title = 'Click to play and select for zone';
+    nameSpan.onmouseenter = () => { nameSpan.style.color = '#93c5fd'; row.style.background = '#1a1a2e'; };
+    nameSpan.onmouseleave = () => { nameSpan.style.color = '#d1d5db'; row.style.background = ''; };
+    nameSpan.onclick = () => {
+      send('preview_track', { url: t.url });
+      document.getElementById('zone-track-inp').value = t.url;
+      closeTTABrowser();
+    };
+
+    row.appendChild(playBtn);
+    row.appendChild(nameSpan);
+    el.appendChild(row);
+  });
+}
+
+// ── Spotify status indicator ──────────────────────────────────────────────────
+async function refreshSpotifyStatus() {
+  try {
+    const r = await fetch('/api/spotify-status');
+    const s = await r.json();
+    const dot = document.getElementById('spotify-status-dot');
+    const txt = document.getElementById('spotify-status-txt');
+    if (s.authed) {
+      dot.style.background = '#1db954';
+      txt.textContent = 'Spotify: connected';
+      txt.style.color = '#4ade80';
+    } else if (s.configured) {
+      dot.style.background = '#f59e0b';
+      txt.textContent = 'Spotify: needs auth';
+      txt.style.color = '#fbbf24';
+    } else {
+      dot.style.background = '#6b7280';
+      txt.textContent = 'Spotify: not set up';
+      txt.style.color = '#6b7280';
+    }
+  } catch(e) {}
+}
+refreshSpotifyStatus();
+setInterval(refreshSpotifyStatus, 30000);
+
+async function setMusicEnabled(enabled) {
+  await fetch('/api/music-enabled', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ enabled })
+  });
+}
+
+function renderZoneList() {
+  // Music enabled checkbox
+  const chk = document.getElementById('music-enabled-chk');
+  if (chk && G) chk.checked = !!G.music_enabled;
+
+  // Default zone row
+  const dz = G && G.default_zone;
+  const dzRow   = document.getElementById('default-zone-row');
+  const dzLabel = document.getElementById('default-zone-label');
+  const dzClear = document.getElementById('default-zone-clear');
+  const dzActive = dz && G && G.active_zone_id === dz.id;
+  dzRow.style.background = dzActive ? '#14532d' : '#2d2d44';
+  dzRow.style.borderColor = dzActive ? '#16a34a' : (dz && dz.color ? dz.color : '#6366f1');
+  if (dz && dz.track) {
+    let shortTrack = dz.track;
+    try {
+      const u = new URL(dz.track);
+      const parts = u.pathname.split('/').filter(Boolean);
+      shortTrack = parts.length >= 2
+        ? `${parts[0]}: ${parts[parts.length-1].slice(0,10)}…`
+        : u.hostname;
+    } catch {
+      const fname = dz.track.replace(/\\/g, '/').split('/').pop();
+      shortTrack = fname.length > 20 ? fname.slice(0, 20) + '…' : fname;
+    }
+    dzLabel.textContent = dz.name + ' — ' + shortTrack;
+    dzLabel.style.color = dzActive ? '#4ade80' : (dz.color || '#a5b4fc');
+    dzClear.style.display = '';
+  } else if (dz) {
+    dzLabel.textContent = dz.name + ' (no track)';
+    dzLabel.style.color = '#6b7280';
+    dzClear.style.display = '';
+  } else {
+    dzLabel.textContent = 'None';
+    dzLabel.style.color = '#6b7280';
+    dzClear.style.display = 'none';
+  }
+
+  const el = document.getElementById('zone-list');
+  el.innerHTML = '';
+  const zones = (G && G.sound_zones) || [];
+  if (!zones.length) {
+    el.innerHTML = '<div style="font-size:11px;color:#6b7280;font-style:italic;">No zones in this scene</div>';
+    return;
+  }
+  for (const z of zones) {
+    const row = document.createElement('div');
+    const isActive = G && G.active_zone_id === z.id;
+    row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;`+
+      `background:${isActive?'#14532d':'#2d2d44'};border:1px solid ${isActive?'#16a34a':z.color};`;
+    row.innerHTML =
+      `<div style="width:12px;height:12px;border-radius:3px;background:${z.color};flex-shrink:0;"></div>`+
+      `<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`+
+      `color:${isActive?'#4ade80':'#e5e7eb'};">${esc(z.name)}</span>`+
+      `<button onclick="deleteZone(${z.id})" style="background:#7f1d1d;border:none;color:#fff;`+
+      `border-radius:3px;padding:2px 6px;cursor:pointer;font-size:11px;">Del</button>`;
+    el.appendChild(row);
+  }
+}
+
+// ── Now-playing display (audio plays on the game board PC, not in the browser) ──
+function updateZoneAudio(state) {
+  const nowEl = document.getElementById('zone-now-playing');
+  function hideNow() { nowEl.textContent = ''; nowEl.style.display = 'none'; }
+  if (!state.music_enabled || !state.active_zone_id) { hideNow(); return; }
+  const zid  = state.active_zone_id;
+  // Default zone is already shown highlighted in its own row — don't duplicate it here
+  if (state.default_zone && state.default_zone.id === zid) { hideNow(); return; }
+  const zone = (state.sound_zones || []).find(z => z.id === zid);
+  if (!zone) { hideNow(); return; }
+  let trackLabel = '';
+  if (zone.track) {
+    // Show a short label instead of the raw URL
+    try {
+      const u = new URL(zone.track);
+      const parts = u.pathname.split('/').filter(Boolean);
+      // e.g. ["track","6rqhFg..."] → "track: 6rqhFg…"
+      trackLabel = parts.length >= 2
+        ? ` — ${parts[0]}: ${parts[parts.length-1].slice(0,10)}…`
+        : ` — ${u.hostname}`;
+    } catch {
+      // Local file path or non-URL — show filename only
+      const fname = zone.track.replace(/\\/g, '/').split('/').pop();
+      trackLabel = ` — ${fname.length > 24 ? fname.slice(0,24)+'…' : fname}`;
+    }
+  }
+  nowEl.textContent = `♫ ${zone.name}${trackLabel}`;
+  nowEl.style.display = '';
+}
+
+function refreshCampaignDisplay() {
+  if (!G || !G.campaign) return;
+  const el = document.getElementById('campaign-name');
+  if (el) el.textContent = G.campaign.active || '—';
+  // If the modal is open, refresh its list (but not if user is mid-rename)
+  const modal = document.getElementById('campaign-modal');
+  if (modal && modal.style.display !== 'none' && !campaignRenaming) renderCampaignList();
+}
+
+function renderScenes() {
+  const el = document.getElementById('scene-list');
+  el.innerHTML = '';
+  (G.scenes || []).forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'scene-btn' + (s.id === G.current_scene_id ? ' active' : '');
+    b.textContent = (s.id === G.start_scene_id ? '* ' : '') + s.name;
+    b.onclick = () => send('switch_scene', { scene_id: s.id });
+    el.appendChild(b);
+  });
+}
+
+function renderInitiative() {
+  const el = document.getElementById('init-list');
+  el.innerHTML = '';
+  (G.initiative_order || []).forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'init-row' + (i === G.current_turn_idx ? ' cur' : '');
+    div.innerHTML =
+      `<div class="init-dot" style="background:${e.is_enemy ? '#ef4444' : '#3b82f6'}"></div>` +
+      `<div class="init-name">${esc(e.name)}</div>` +
+      `<div class="init-val">${e.initiative}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function makeHpCell(ent, isEnemy) {
+  const ratio = ent.max_hp > 0 ? ent.hp / ent.max_hp : 0;
+  const pct   = Math.round(ratio * 100);
+  const nm    = esc(ent.name);
+  return `<div class="hp-grp">
+    <button class="hp-btn hp-minus" onclick="openHpModal(${ent.id},${isEnemy},'${nm}',true)"  title="Subtract HP">&#8722;</button>
+    <span  class="hp-val" style="cursor:pointer;text-decoration:underline dotted;"
+           title="Click to damage / heal"
+           onclick="openHpModal(${ent.id},${isEnemy},'${nm}')">${ent.hp}/${ent.max_hp}</span>
+    <button class="hp-btn hp-plus"  onclick="openHpModal(${ent.id},${isEnemy},'${nm}',false)" title="Add HP">+</button>
+  </div>
+  <div class="hp-bar"><div class="hp-fill" style="width:${pct}%;background:${hpColor(ratio)}"></div></div>`;
+}
+
+function renderCharacters() {
+  const tb    = document.getElementById('char-tbody');
+  const npcTb = document.getElementById('npc-tbody');
+  const npcSec = document.getElementById('npc-section');
+  tb.innerHTML = ''; npcTb.innerHTML = '';
+  const all = G.characters || [];
+  const party = all.filter(c => !c.is_npc);
+  const npcs  = all.filter(c =>  c.is_npc);
+
+  function makeRow(c) {
+    const isSel = selected && !selected.isEnemy && selected.id === c.id;
+    const tr = document.createElement('tr');
+    if (isSel) tr.style.outline = '1px solid #f0a500';
+    tr.innerHTML =
+      `<td><span class="color-dot" style="background:${c.color}"></span></td>` +
+      `<td style="cursor:pointer" onclick="selToken(${c.id},false,'${esc(c.name)}')">${esc(c.name)}</td>` +
+      `<td>${makeHpCell(c, false)}</td>` +
+      `<td><input class="init-inp" type="number" value="${c.initiative}" min="1" max="30"
+            onchange="setInit(${c.id},false,this.value)"></td>`;
+    return tr;
+  }
+
+  party.forEach(c => tb.appendChild(makeRow(c)));
+  npcs.forEach(c  => npcTb.appendChild(makeRow(c)));
+  npcSec.style.display = npcs.length ? '' : 'none';
+}
+
+function renderEnemies() {
+  const tb = document.getElementById('enemy-tbody');
+  tb.innerHTML = '';
+  (G.enemies || []).forEach(e => {
+    const isSel = selected && selected.isEnemy && selected.id === e.id;
+    const tr = document.createElement('tr');
+    if (isSel) tr.style.outline = '1px solid #f0a500';
+    tr.innerHTML =
+      `<td><span class="color-dot" style="background:${e.color}"></span></td>` +
+      `<td style="cursor:pointer" onclick="selToken(${e.id},true,'${esc(e.name)}')">${esc(e.name)}</td>` +
+      `<td>${makeHpCell(e, true)}</td>` +
+      `<td><input class="init-inp" type="number" value="${e.initiative}" min="1" max="30"
+            onchange="setInit(${e.id},true,this.value)"></td>` +
+      `<td><button class="btn btn-red" style="padding:2px 6px;font-size:11px;"
+            onclick="delEnemy(${e.id})">X</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function refreshFogBtn() {
+  const b = document.getElementById('fog-btn');
+  if (G && G.fog_on) {
+    b.textContent = 'Fog: ON';  b.className = 'btn btn-full fog-on';
+  } else {
+    b.textContent = 'Fog: OFF'; b.className = 'btn btn-full fog-off';
+  }
+}
+
+function refreshSelPanel() {
+  const name      = document.getElementById('sel-name');
+  const pos       = document.getElementById('sel-pos');
+  const hint      = document.getElementById('sel-hint');
+  const condBadge = document.getElementById('sel-conditions');
+  const condToggle= document.getElementById('sel-cond-toggle');
+  if (!selected || !G) {
+    name.textContent = 'None'; name.style.color = '#9ca3af';
+    pos.textContent  = '';
+    condBadge.innerHTML = '';
+    condToggle.style.display = 'none';
+    hint.textContent = 'Click a token on the map to select it, then click the map to move it — or drag the token directly.';
+    return;
+  }
+  const list = selected.isEnemy ? G.enemies : G.characters;
+  const t    = (list || []).find(x => x.id === selected.id);
+  if (!t) return;
+  name.textContent = t.name; name.style.color = t.color;
+  pos.textContent  = `x: ${Math.round(t.x)}, y: ${Math.round(t.y)}`;
+  hint.textContent = 'Click map to move. Drag token to reposition.';
+
+  // Active conditions as colored badges
+  const active = new Set(t.conditions || []);
+  condBadge.innerHTML = '';
+  if (active.size === 0) {
+    const none = document.createElement('span');
+    none.style.cssText = 'font-size:11px;color:#6b7280;font-style:italic;';
+    none.textContent = 'No conditions';
+    condBadge.appendChild(none);
+  } else {
+    for (const code of [...active].sort()) {
+      const info = CONDITIONS[code];
+      if (!info) continue;
+      const badge = document.createElement('span');
+      badge.title = info.name;
+      badge.style.cssText = `display:inline-block;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:bold;background:${info.color};color:#000;cursor:pointer;`;
+      badge.textContent = info.name;
+      badge.onclick = () => send('toggle_condition', { entity_id: t.id, is_enemy: selected.isEnemy, code });
+      condBadge.appendChild(badge);
+    }
+  }
+
+  // All-conditions toggle row
+  condToggle.innerHTML = '';
+  for (const [code, info] of Object.entries(CONDITIONS)) {
+    const on = active.has(code);
+    const btn = document.createElement('button');
+    btn.title = info.name;
+    btn.textContent = info.abbr;
+    btn.style.cssText = `padding:3px 5px;border-radius:3px;border:1px solid #444;font-size:11px;font-weight:bold;cursor:pointer;` +
+      `background:${on ? info.color : '#2d2d44'};color:${on ? '#000' : '#888'};` +
+      `outline:${on ? `2px solid ${info.color}` : 'none'};`;
+    btn.onclick = () => send('toggle_condition', { entity_id: t.id, is_enemy: selected.isEnemy, code });
+    condToggle.appendChild(btn);
+  }
+
+  // If the panel is collapsed, keep all children hidden — don't let display
+  // assignments above fight the collapse mechanism
+  const selPanel = document.getElementById('sel-panel');
+  if (selPanel && selPanel._cp_collapsed) {
+    const title = selPanel.querySelector(':scope > .panel-title');
+    Array.from(selPanel.children).forEach(ch => {
+      if (ch !== title) ch.style.display = 'none';
+    });
+  } else {
+    condToggle.style.display = 'flex';
+  }
+}
+
+// ── Action helpers ────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function selToken(id, isEnemy, name) {
+  selected = { id, isEnemy, name };
+  drawMap();
+  refreshSelPanel();
+}
+
+function setInit(id, isEnemy, val) {
+  send('set_initiative', { entity_id: id, is_enemy: isEnemy, value: parseInt(val) || 0 });
+}
+
+function delEnemy(id) {
+  if (confirm('Remove this enemy from the scene?')) send('delete_enemy', { entity_id: id });
+}
+
+// ── Party move toggle ─────────────────────────────────────────────────────────
+function togglePartyMove() {
+  partyMoveMode     = !partyMoveMode;
+  partyDragStart    = null;
+  partyInitCentroid = null;
+  dragToken         = null;
+  const btn = document.getElementById('party-btn');
+  if (partyMoveMode) {
+    btn.textContent   = 'Party Move: ON';
+    btn.style.background = '#7c3aed';
+    canvas.style.cursor  = 'move';
+    selected = null;
+  } else {
+    btn.textContent   = 'Move Party';
+    btn.style.background = '';
+    canvas.style.cursor  = 'crosshair';
+  }
+  drawMap();
+}
+
+// ── View mode toggle ──────────────────────────────────────────────────────────
+function toggleViewMode() {
+  viewMode = (viewMode === 'camera') ? 'overview' : 'camera';
+  const btn = document.getElementById('view-toggle');
+  btn.textContent = (viewMode === 'camera') ? 'Overview' : 'Camera View';
+  drawMap();
+}
+
+// ── Campaign management ───────────────────────────────────────────────────────
+function openCampaignModal() {
+  const modal = document.getElementById('campaign-modal');
+  modal.style.display = 'flex';
+  renderCampaignList();
+}
+
+function closeCampaignModal() {
+  document.getElementById('campaign-modal').style.display = 'none';
+  document.getElementById('campaign-modal-err').textContent = '';
+}
+
+function renderCampaignList() {
+  const list = document.getElementById('campaign-list');
+  list.innerHTML = '';
+  if (!G || !G.campaign) return;
+  const { all, active } = G.campaign;
+  for (const name of all) {
+    const isActive = name === active;
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;background:${isActive ? '#14532d' : '#2d2d44'};border:1px solid ${isActive ? '#16a34a' : '#4c1d95'}`;
+
+    const label = document.createElement('span');
+    label.style.cssText = 'flex:1;font-size:13px;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    label.textContent = name + (isActive ? '  [active]' : '');
+    row.appendChild(label);
+
+    // ✏ Rename button — turns the row into an inline edit field
+    const renBtn = document.createElement('button');
+    renBtn.textContent = '✏';
+    renBtn.title = 'Rename';
+    renBtn.style.cssText = 'background:#78350f;border:none;color:#fff;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;flex-shrink:0;';
+    renBtn.onclick = () => startInlineRename(row, name, label, renBtn);
+    row.appendChild(renBtn);
+
+    if (!isActive) {
+      const sw = document.createElement('button');
+      sw.textContent = 'Switch';
+      sw.style.cssText = 'background:#1e40af;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;';
+      sw.onclick = () => switchCampaign(name);
+      row.appendChild(sw);
+      if (name !== 'default') {
+        const del = document.createElement('button');
+        del.textContent = 'Delete';
+        del.style.cssText = 'background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;';
+        del.onclick = () => deleteCampaign(name);
+        row.appendChild(del);
+      }
+    }
+    list.appendChild(row);
+  }
+}
+
+async function startInlineRename(row, oldName, label, renBtn) {
+  campaignRenaming = true;
+
+  // Swap label for an editable input pre-filled with the current name
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = oldName;
+  inp.style.cssText = 'flex:1;padding:2px 6px;border-radius:4px;border:1px solid #d97706;background:#1c1c2e;color:#fff;font-size:13px;min-width:0;';
+  row.replaceChild(inp, label);
+  inp.focus();
+  inp.select();
+
+  // Swap ✏ for ✓ confirm
+  renBtn.textContent = '✓';
+  renBtn.title = 'Confirm rename';
+  renBtn.style.background = '#166534';
+
+  const cancel = () => {
+    campaignRenaming = false;
+    row.replaceChild(label, inp);
+    renBtn.textContent = '✏';
+    renBtn.title = 'Rename';
+    renBtn.style.background = '#78350f';
+    renBtn.onclick = () => startInlineRename(row, oldName, label, renBtn);
+  };
+
+  const confirm = async () => {
+    const newName = inp.value.trim();
+    const err = document.getElementById('campaign-modal-err');
+    err.textContent = '';
+    if (!newName || newName === oldName) { cancel(); return; }
+    campaignRenaming = false;  // allow re-render once request is sent
+    try {
+      const r = await fetch(`/api/campaigns/${encodeURIComponent(oldName)}`, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ new_name: newName })
+      });
+      const data = await r.json();
+      if (!r.ok) { err.textContent = data.error || 'Error renaming.'; return; }
+      // List refreshes automatically on next state broadcast from pygame
+    } catch(e) { document.getElementById('campaign-modal-err').textContent = 'Network error.'; }
+  };
+
+  renBtn.onclick = confirm;
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); confirm(); }
+    if (e.key === 'Escape') { cancel(); }
+  };
+}
+
+function switchCampaign(name) {
+  send('switch_campaign', { name });
+  closeCampaignModal();
+}
+
+async function createCampaign(andSwitch) {
+  const inp = document.getElementById('campaign-new-name');
+  const err = document.getElementById('campaign-modal-err');
+  const name = inp.value.trim();
+  err.textContent = '';
+  if (!name) { err.textContent = 'Enter a campaign name.'; return; }
+  try {
+    const r = await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, switch: andSwitch })
+    });
+    const data = await r.json();
+    if (!r.ok) { err.textContent = data.error || 'Error creating campaign.'; return; }
+    inp.value = '';
+    if (andSwitch) { closeCampaignModal(); }
+    // State will update via heartbeat / socket
+  } catch(e) { err.textContent = 'Network error.'; }
+}
+
+
+async function deleteCampaign(name) {
+  const err = document.getElementById('campaign-modal-err');
+  err.textContent = '';
+  if (!confirm(`Delete campaign "${name}"? This cannot be undone.`)) return;
+  try {
+    const r = await fetch(`/api/campaigns/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await r.json();
+    if (!r.ok) { err.textContent = data.error || 'Error deleting campaign.'; return; }
+    renderCampaignList();
+  } catch(e) { err.textContent = 'Network error.'; }
+}
+
+// ── Button wiring ─────────────────────────────────────────────────────────────
+document.getElementById('fog-btn').onclick   = () => send('toggle_fog');
+document.getElementById('party-btn').onclick = () => togglePartyMove();
+document.getElementById('roll-btn').onclick = () => {
+  send('roll_initiative');
+  const b = document.getElementById('roll-btn');
+  b.textContent = 'Rolling…'; b.disabled = true;
+  setTimeout(() => { b.textContent = 'Roll Initiative'; b.disabled = false; }, 800);
+};
+document.getElementById('prev-btn').onclick = () => send('prev_turn');
+document.getElementById('next-btn').onclick = () => send('next_turn');
+
+// ── PIN Lock ──────────────────────────────────────────────────────────────────
+let _lockInput = '';
+let _setupPin1 = '', _setupPin2 = '', _setupPhase = 1;
+
+function _updateDots(id, val, slots) {
+  const c = document.getElementById(id);
+  if (!c) return;
+  c.innerHTML = '';
+  const n = Math.max(val.length, slots || 6);
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement('span');
+    d.className = 'pin-dot' + (i < val.length ? ' filled' : '');
+    c.appendChild(d);
+  }
+}
+
+function lockPad(key) {
+  const err = document.getElementById('unlock-error');
+  if (key === 'CLR') {
+    _lockInput = _lockInput.slice(0, -1);
+  } else if (key === 'OK') {
+    if (!_lockInput) return;
+    fetch('/api/unlock', { method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({pin: _lockInput}) })
+    .then(r => r.json()).then(d => {
+      if (d.ok) {
+        _lockInput = ''; err.textContent = '';
+      } else {
+        err.textContent = 'Incorrect PIN';
+        _lockInput = ''; _updateDots('unlock-dots', '');
+      }
+    }).catch(() => { err.textContent = 'Network error'; });
+    return;
+  } else if (_lockInput.length < 8) {
+    _lockInput += key;
+    if (err) err.textContent = '';
+  }
+  _updateDots('unlock-dots', _lockInput);
+}
+
+function setupPad(key) {
+  const err   = document.getElementById('pin-setup-error');
+  const phase = document.getElementById('pin-modal-phase');
+  let cur = _setupPhase === 1 ? _setupPin1 : _setupPin2;
+  if (key === 'CLR') {
+    cur = cur.slice(0, -1);
+  } else if (key === 'OK') {
+    if (!cur) { err.textContent = 'Enter at least 1 digit'; return; }
+    if (_setupPhase === 1) {
+      _setupPin1 = cur; _setupPin2 = ''; _setupPhase = 2;
+      phase.textContent = 'Confirm PIN:';
+      err.textContent = ''; _updateDots('pin-setup-dots', ''); return;
+    } else {
+      if (cur !== _setupPin1) {
+        err.textContent = 'PINs do not match — try again';
+        _setupPin1 = ''; _setupPin2 = ''; _setupPhase = 1;
+        phase.textContent = 'Enter new PIN:'; _updateDots('pin-setup-dots', ''); return;
+      }
+      fetch('/api/set-pin', { method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pin: _setupPin1}) })
+      .then(r => r.json()).then(d => {
+        if (d.ok) {
+          closePinSetup();
+          fetch('/api/lock', {method: 'POST'});
+        } else { err.textContent = d.error || 'Error'; }
+      }).catch(() => { err.textContent = 'Network error'; });
+      return;
+    }
+  } else if (cur.length < 8) {
+    cur += key; err.textContent = '';
+  }
+  if (_setupPhase === 1) _setupPin1 = cur; else _setupPin2 = cur;
+  _updateDots('pin-setup-dots', cur);
+}
+
+function openPinSetup() {
+  _setupPin1 = ''; _setupPin2 = ''; _setupPhase = 1;
+  const p = document.getElementById('pin-modal-phase');
+  if (p) p.textContent = 'Enter new PIN:';
+  const e = document.getElementById('pin-setup-error');
+  if (e) e.textContent = '';
+  _updateDots('pin-setup-dots', '');
+  document.getElementById('pin-modal-bg').classList.remove('hidden');
+}
+
+function closePinSetup() {
+  _setupPin1 = ''; _setupPin2 = ''; _setupPhase = 1;
+  const p = document.getElementById('pin-modal-phase');
+  if (p) p.textContent = 'Enter new PIN:';
+  const e = document.getElementById('pin-setup-error');
+  if (e) e.textContent = '';
+  _updateDots('pin-setup-dots', '');
+  document.getElementById('pin-modal-bg').classList.add('hidden');
+}
+
+async function handleLockBtn() {
+  if (G && G.locked) return;
+  const resp = await fetch('/api/pin-status');
+  const d    = await resp.json();
+  if (d.has_pin) {
+    await fetch('/api/lock', {method: 'POST'});
+  } else {
+    openPinSetup();
+  }
+}
+
+function _applyLockState() {
+  if (!G) return;
+  const overlay = document.getElementById('lock-overlay');
+  const btn     = document.getElementById('lock-btn');
+  if (G.locked) {
+    if (overlay) overlay.classList.remove('hidden');
+    if (btn) { btn.textContent = 'Locked'; btn.classList.add('locked'); }
+  } else {
+    if (overlay) overlay.classList.add('hidden');
+    _lockInput = ''; _updateDots('unlock-dots', '');
+    const err = document.getElementById('unlock-error');
+    if (err) err.textContent = '';
+    if (btn) { btn.textContent = 'Lock'; btn.classList.remove('locked'); }
+  }
+}
+
+// ── Collapsible left-column panels ───────────────────────────────────────────
+(function() {
+  document.querySelectorAll('#col-left .panel').forEach(panel => {
+    const title = panel.querySelector(':scope > .panel-title');
+    if (!title) return;
+
+    const key = 'rs-lp-' + title.textContent.trim().replace(/\s+/g, '').toLowerCase().slice(0, 12);
+
+    const arrow = document.createElement('span');
+    arrow.className = 'cp-arrow';
+    title.appendChild(arrow);
+
+    function collapse(on, save) {
+      Array.from(panel.children).forEach(ch => {
+        if (ch !== title) ch.style.display = on ? 'none' : '';
+      });
+      arrow.textContent = on ? ' ▼' : ' ▲';
+      panel._cp_collapsed = on;
+      if (save) localStorage.setItem(key, on ? '1' : '0');
+    }
+
+    collapse(localStorage.getItem(key) !== '0', false);
+
+    title.addEventListener('click', ev => {
+      // Don't collapse when clicking a button/input inside the title bar
+      if (ev.target !== title && ev.target.closest('button,a,input,label,select')) return;
+      collapse(!panel._cp_collapsed, true);
+    });
+  });
+})();
+</script>
+
+<!-- Lock overlay -->
+<div id="lock-overlay" class="hidden">
+  <div class="lock-box">
+    <div class="lock-title">[ LOCKED ]</div>
+    <div class="lock-sub">Enter PIN to unlock</div>
+    <div class="pin-dots" id="unlock-dots"></div>
+    <div class="pin-error" id="unlock-error"></div>
+    <div class="numpad">
+      <button onclick="lockPad('1')">1</button>
+      <button onclick="lockPad('2')">2</button>
+      <button onclick="lockPad('3')">3</button>
+      <button onclick="lockPad('4')">4</button>
+      <button onclick="lockPad('5')">5</button>
+      <button onclick="lockPad('6')">6</button>
+      <button onclick="lockPad('7')">7</button>
+      <button onclick="lockPad('8')">8</button>
+      <button onclick="lockPad('9')">9</button>
+      <button class="clr-btn" onclick="lockPad('CLR')">CLR</button>
+      <button onclick="lockPad('0')">0</button>
+      <button class="ok-btn" onclick="lockPad('OK')">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN setup modal -->
+<div id="pin-modal-bg" class="hidden">
+  <div id="pin-modal">
+    <h3>Setup Lock PIN</h3>
+    <div id="pin-modal-phase" style="font-size:12px;color:#8899aa;margin-bottom:8px">Enter new PIN:</div>
+    <div class="pin-dots" id="pin-setup-dots"></div>
+    <div class="pin-error" id="pin-setup-error"></div>
+    <div class="numpad">
+      <button onclick="setupPad('1')">1</button>
+      <button onclick="setupPad('2')">2</button>
+      <button onclick="setupPad('3')">3</button>
+      <button onclick="setupPad('4')">4</button>
+      <button onclick="setupPad('5')">5</button>
+      <button onclick="setupPad('6')">6</button>
+      <button onclick="setupPad('7')">7</button>
+      <button onclick="setupPad('8')">8</button>
+      <button onclick="setupPad('9')">9</button>
+      <button class="clr-btn" onclick="setupPad('CLR')">CLR</button>
+      <button onclick="setupPad('0')">0</button>
+      <button class="ok-btn" onclick="setupPad('OK')">OK</button>
+    </div>
+    <button class="btn" style="width:100%;margin-top:10px" onclick="closePinSetup()">Cancel</button>
+  </div>
+</div>
+</body>
+</html>

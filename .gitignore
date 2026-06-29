@@ -1,0 +1,9 @@
+/.venv
+/cache/
+/campaigns/
+spotify_auth.json
+*.pyc
+__pycache__/
+*.db
+*.db-shm
+*.db-wal
