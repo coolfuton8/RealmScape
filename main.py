@@ -35,6 +35,7 @@ from ui        import Toolbar, ContextMenu, InitiativePanel, HPPopup, Conditions
 import pin_manager
 from tools     import FogOfWar, AoeTool, MeasureTool
 import db
+from feedback  import sound_fx, press_fx
 import campaigns as campaigns_mod
 import server as dm_server
 
@@ -583,6 +584,7 @@ def _apply_music_enabled(enabled):
 # Init pygame.mixer for local audio
 try:
     pygame.mixer.init()
+    sound_fx.init()
 except Exception:
     pass
 
@@ -1588,6 +1590,7 @@ def open_context_menu(screen_x, screen_y):
             context_menu._hit_item = hit_item
             context_menu._hit_trap = None
             context_menu.reposition(WIDTH, HEIGHT)
+            sound_fx.play('menu_open')
             return
         elif hit_trap:
             items = [
@@ -1603,6 +1606,7 @@ def open_context_menu(screen_x, screen_y):
             context_menu._hit_item = None
             context_menu._hit_trap = hit_trap
             context_menu.reposition(WIDTH, HEIGHT)
+            sound_fx.play('menu_open')
             return
         else:
             items = [
@@ -1623,6 +1627,7 @@ def open_context_menu(screen_x, screen_y):
     context_menu._wx     = wx
     context_menu._wy     = wy
     context_menu.reposition(WIDTH, HEIGHT)
+    sound_fx.play('menu_open')
 
 # ── Apply campaign dialog result ──────────────────────────────────────────────
 
@@ -1726,6 +1731,7 @@ def apply_char_dialog(result):
     global char_dialog, characters
     if char_dialog is None:
         return
+    sound_fx.play('confirm')
     img_path = result.get('image_path', '')
     rel_img  = campaigns_mod.import_asset(img_path, active_campaign) if img_path else ''
     if char_dialog.mode == 'create':
@@ -1792,6 +1798,7 @@ def apply_enemy_dialog(result):
     global enemy_dialog
     if enemy_dialog is None:
         return
+    sound_fx.play('confirm')
     ent      = enemy_dialog.entity
     img_path = result.get('image_path', '')
     rel_img  = campaigns_mod.import_asset(img_path, active_campaign) if img_path else ''
@@ -2455,9 +2462,69 @@ def apply_num_input(kind, amount):
             db.update_character_hp(ent.id, ent.hp)
     num_input_popup = None
 
+# ── Button feedback sound maps ─────────────────────────────────────────────────
+
+_TOOLBAR_SOUND = {
+    'roll_init':     'roll',
+    'add_enemy':     'click',
+    'add_char':      'click',
+    'clear_all':     'damage',
+    'reset_campaign':'damage',
+    'scene_add':     'confirm',
+    'scene_del':     'damage',
+    'prev_turn':     'select',
+    'next_turn':     'select',
+    'fog_on':        'click',
+    'music_enabled': 'click',
+}
+# All other toolbar buttons default to 'click' (see _toolbar_sound())
+
+def _toolbar_sound(btn_id):
+    return _TOOLBAR_SOUND.get(btn_id, 'click')
+
+_CONTEXT_SOUND = {
+    'damage':           'damage',
+    'group_damage':     'damage',
+    'heal':             'heal',
+    'group_heal':       'heal',
+    'remove':           'damage',
+    'remove_item':      'damage',
+    'remove_trap':      'damage',
+    'char_settings':    'click',
+    'enemy_settings':   'click',
+    'rename':           'click',
+    'set_hp':           'click',
+    'conditions':       'click',
+    'set_init':         'click',
+    'set_size':         'click',
+    'stat_block':       'click',
+    'clear_reticle':    'click',
+    'pin_to_scene':     'click',
+    'make_global':      'click',
+    'edit_item':        'click',
+    'edit_trap':        'click',
+    'reset_trap':       'click',
+    'remove_from_scene':'damage',
+}
+
+_HP_POPUP_SOUND = {
+    'close':       'cancel',
+    'hp':          None,          # resolved dynamically (damage vs heal)
+    'max_hp':      'select',
+    'full_heal':   'heal',
+    'set_as_max':  'confirm',
+    'set_hp_abs':  'select',
+    'set_max_abs': 'select',
+}
+
 def _apply_hp_popup(kind, val):
     """Apply a result from HPPopup.hit() or HPPopup.key() to the entity."""
     global hp_popup
+    # Play sound before mutating state
+    if kind == 'hp':
+        sound_fx.play('damage' if (val or 0) < 0 else 'heal')
+    elif kind in _HP_POPUP_SOUND and _HP_POPUP_SOUND[kind]:
+        sound_fx.play(_HP_POPUP_SOUND[kind])
     if kind == 'close':
         hp_popup = None
     elif kind == 'hp':
@@ -2828,6 +2895,7 @@ while running:
                     hit = next((e for e in enemies + characters
                                 if e.is_clicked(fake_pos, camera_x, camera_y)), None)
                     if hit:
+                        sound_fx.play('pickup')
                         for c in characters: c.selected = False
                         hit.selected = True
 
@@ -2964,16 +3032,30 @@ while running:
             if char_dialog:
                 result = char_dialog.handle_event(event)
                 if result == 'cancel':
+                    r = getattr(char_dialog, 'last_press_rect', None)
+                    (press_fx.trigger(r) if r else press_fx.trigger_pos(event.pos)) \
+                        if event.type == pygame.MOUSEBUTTONDOWN else None
+                    sound_fx.play('cancel')
                     char_dialog = None
                 elif result is not None:
+                    r = getattr(char_dialog, 'last_press_rect', None)
+                    (press_fx.trigger(r) if r else press_fx.trigger_pos(event.pos)) \
+                        if event.type == pygame.MOUSEBUTTONDOWN else None
                     apply_char_dialog(result)
                 continue
 
             if enemy_dialog:
                 result = enemy_dialog.handle_event(event)
                 if result == 'cancel':
+                    r = getattr(enemy_dialog, 'last_press_rect', None)
+                    (press_fx.trigger(r) if r else press_fx.trigger_pos(event.pos)) \
+                        if event.type == pygame.MOUSEBUTTONDOWN else None
+                    sound_fx.play('cancel')
                     enemy_dialog = None
                 elif result is not None:
+                    r = getattr(enemy_dialog, 'last_press_rect', None)
+                    (press_fx.trigger(r) if r else press_fx.trigger_pos(event.pos)) \
+                        if event.type == pygame.MOUSEBUTTONDOWN else None
                     apply_enemy_dialog(result)
                 continue
 
@@ -3071,9 +3153,13 @@ while running:
             if confirm_popup:
                 result = confirm_popup.hit(pos)
                 if result is True:
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('confirm')
                     _apply_confirm(confirm_popup._pending)
                     confirm_popup = None
                 elif result is False:
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('cancel')
                     confirm_popup = None
                 continue
 
@@ -3081,8 +3167,17 @@ while running:
             if group_hp_popup:
                 action, amt, ids = group_hp_popup.hit(pos)
                 if action == 'close':
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('cancel')
                     group_hp_popup = None
-                elif action in ('damage', 'heal', 'full_heal'):
+                elif action == 'damage':
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('damage')
+                    _apply_group_hp(action, amt, ids)
+                    group_hp_popup = None
+                elif action in ('heal', 'full_heal'):
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('heal')
                     _apply_group_hp(action, amt, ids)
                     group_hp_popup = None
                 continue
@@ -3090,22 +3185,37 @@ while running:
             # Number-input popup (damage / heal)
             if num_input_popup:
                 kind, val = num_input_popup.hit(pos)
-                if kind in ('confirm', 'cancel'):
+                if kind == 'confirm':
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('damage' if num_input_popup.mode == 'damage' else 'heal')
+                    apply_num_input(kind, val or 0)
+                elif kind == 'cancel':
+                    press_fx.trigger_pos(pos)
+                    sound_fx.play('cancel')
                     apply_num_input(kind, val or 0)
                 continue
 
             # HP popup
             if hp_popup:
-                kind, val = hp_popup.hit(pos)
+                kind, val = hp_popup.hit(pos)   # also sets hp_popup.last_hit_rect
+                if kind is not None:
+                    r = hp_popup.last_hit_rect
+                    press_fx.trigger(r) if r else press_fx.trigger_pos(pos)
                 _apply_hp_popup(kind, val)
                 continue
 
             # Conditions popup
             if conditions_popup:
-                kind, val = conditions_popup.hit(pos)
+                kind, val = conditions_popup.hit(pos)  # sets conditions_popup.last_hit_rect
                 if kind == 'close':
+                    r = conditions_popup.last_hit_rect
+                    press_fx.trigger(r) if r else press_fx.trigger_pos(pos)
+                    sound_fx.play('cancel')
                     conditions_popup = None
                 elif kind == 'toggle':
+                    r = conditions_popup.last_hit_rect
+                    press_fx.trigger(r) if r else press_fx.trigger_pos(pos)
+                    sound_fx.play('select')
                     ent = conditions_popup.entity
                     if val in ent.conditions: ent.conditions.discard(val)
                     else:                     ent.conditions.add(val)
@@ -3116,8 +3226,11 @@ while running:
 
             # Context menu
             if context_menu:
-                action = context_menu.hit(pos)
+                action = context_menu.hit(pos)  # also sets context_menu.last_hit_rect
                 if action:
+                    r = context_menu.last_hit_rect
+                    press_fx.trigger(r) if r else press_fx.trigger_pos(pos)
+                    sound_fx.play(_CONTEXT_SOUND.get(action, 'click'))
                     handle_context(action)
                 elif context_menu.is_outside(pos):
                     context_menu = None
@@ -3138,9 +3251,15 @@ while running:
 
             # Toolbar
             if toolbar.is_over(pos):
-                btn = toolbar.click(pos)
+                btn = toolbar.click(pos)    # also sets toolbar.last_hit_rect
+                r = toolbar.last_hit_rect
+                if r:
+                    press_fx.trigger(r)
                 if btn:
+                    sound_fx.play(_toolbar_sound(btn))
                     handle_toolbar(btn)
+                else:
+                    sound_fx.play('click')  # tab open/close
                 continue
 
             # Map area  (pos adjusted for toolbar offset for world coords)
@@ -3182,12 +3301,14 @@ while running:
                     if mk.is_clicked(pos, camera_x, camera_y, TOOLBAR_HEIGHT):
                         dragged_marker    = mk
                         marker_drag_start = pos   # screen coords at press-down
+                        sound_fx.play('select')
                         break
                 if not dragged_marker:
                     for ent in characters + enemies:
                         if ent.is_clicked(map_pos, camera_x, camera_y):
                             dragged_ent = ent
                             dragging    = True
+                            sound_fx.play('pickup')
                             _is_party = not ent.is_enemy and not getattr(ent, 'is_npc', False)
                             if toolbar.active.get('group_move') and _is_party:
                                 _gm_party = [c for c in characters if not getattr(c, 'is_npc', False)]
@@ -3247,6 +3368,8 @@ while running:
                         moved_px = 0
                     if moved_px < 6:
                         # Tap — switch to linked scene, auto-place return marker
+                        # Transient (return) markers descend; permanent markers ascend
+                        sound_fx.play('portal_return' if dragged_marker.id is None else 'portal')
                         _return_from_id   = scene_id()
                         _return_to_sid    = dragged_marker.to_scene_id
                         switch_scene(next((i for i, s in enumerate(scenes)
@@ -3420,7 +3543,8 @@ while running:
             # HP popup typed-input captures keys when a field is focused
             if hp_popup and hp_popup.focus is not None:
                 kind, val = hp_popup.key(event)
-                _apply_hp_popup(kind, val)
+                if kind is not None:
+                    _apply_hp_popup(kind, val)
                 continue
 
             if _place_item_dialog:
@@ -3529,6 +3653,7 @@ while running:
             if char_dialog:
                 result = char_dialog.handle_event(event)
                 if result == 'cancel':
+                    sound_fx.play('cancel')
                     char_dialog = None
                 elif result is not None:
                     apply_char_dialog(result)
@@ -3537,6 +3662,7 @@ while running:
             if enemy_dialog:
                 result = enemy_dialog.handle_event(event)
                 if result == 'cancel':
+                    sound_fx.play('cancel')
                     enemy_dialog = None
                 elif result is not None:
                     apply_enemy_dialog(result)
@@ -3900,6 +4026,7 @@ while running:
         except Exception as _e:
             print(f'[Audio] play cached: {_e}')
 
+    press_fx.draw(screen)
     draw_hotspot_overlay(screen, font, small_font)
 
     try:

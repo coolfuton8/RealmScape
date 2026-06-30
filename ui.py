@@ -252,10 +252,14 @@ class Toolbar:
             self._ck = None
 
     def click(self, pos):
-        """Handle a click. Returns btn_id for actions/toggles, None for tab-clicks."""
+        """Handle a click. Returns btn_id for actions/toggles, None for tab-clicks.
+        Sets self.last_hit_rect to the exact rect that was hit (for press feedback)."""
+        self.last_hit_rect = None
+
         # Group tabs
         for gid, rect in self._tab_r.items():
             if rect.collidepoint(pos):
+                self.last_hit_rect = rect
                 self.open_group = gid if self.open_group != gid else None
                 self._ck = None
                 return None
@@ -267,6 +271,7 @@ class Toolbar:
                     # Expand hit area vertically so the narrow track is easy to grab
                     hit_r = self._zoom_track_r.inflate(0, 28) if self._zoom_track_r else rect
                     if hit_r.collidepoint(pos):
+                        self.last_hit_rect = rect
                         self._zoom_dragging = True
                         self.zoom_level = self._zoom_from_x(pos[0])
                         return '_zoom_slider'
@@ -275,6 +280,7 @@ class Toolbar:
                     return None   # other non-interactive decorators
                 if bid in self.disabled_btns:
                     return None
+                self.last_hit_rect = rect
                 if self._is_toggle(bid):
                     self.active[bid] = not self.active.get(bid, False)
                     if bid in ('aoe_circle', 'aoe_cone', 'aoe_line'):
@@ -298,17 +304,23 @@ class Toolbar:
             return None
 
         # Turn tracker
-        if self._tp and self._tp.collidepoint(pos): return 'prev_turn'
-        if self._tn and self._tn.collidepoint(pos): return 'next_turn'
+        if self._tp and self._tp.collidepoint(pos):
+            self.last_hit_rect = self._tp
+            return 'prev_turn'
+        if self._tn and self._tn.collidepoint(pos):
+            self.last_hit_rect = self._tn
+            return 'next_turn'
 
         # Scene controls
         for key, bid in [('prev', 'scene_prev'), ('next', 'scene_next'),
                           ('add',  'scene_add'),  ('del',  'scene_del')]:
             r = self._sc_r.get(key)
             if r and r.collidepoint(pos):
+                self.last_hit_rect = r
                 return bid
         r = self._sc_r.get('name')
         if r and r.collidepoint(pos):
+            self.last_hit_rect = r
             return 'scene_rename'
         return None
 
@@ -528,8 +540,10 @@ class ContextMenu:
                 surface.blit(lbl, (rect.x + 10, rect.centery - lbl.get_height() // 2))
 
     def hit(self, pos):
+        self.last_hit_rect = None
         for item_id, rect in self.rects:
             if item_id is not None and rect.collidepoint(pos):
+                self.last_hit_rect = rect
                 return item_id
         return None
 
@@ -828,24 +842,32 @@ class HPPopup:
         Returns ('close', None), ('hp', delta), ('max_hp', delta),
         ('full_heal', None), ('set_as_max', None),
         ('set_hp_abs', value), ('set_max_abs', value), or (None, None).
+        Sets self.last_hit_rect to the exact button rect that was hit.
         """
+        self.last_hit_rect = None
         if self.close_rect.collidepoint(pos):
+            self.last_hit_rect = self.close_rect
             return ('close', None)
         for rect, _, delta in self.btns:
             if rect.collidepoint(pos):
+                self.last_hit_rect = rect
                 self.focus = None
                 return ('hp', delta)
         for rect, _, delta in self.max_btns:
             if rect.collidepoint(pos):
+                self.last_hit_rect = rect
                 self.focus = None
                 return ('max_hp', delta)
         if self.full_heal_rect.collidepoint(pos):
+            self.last_hit_rect = self.full_heal_rect
             self.focus = None
             return ('full_heal', None)
         if self.set_max_rect.collidepoint(pos):
+            self.last_hit_rect = self.set_max_rect
             self.focus = None
             return ('set_as_max', None)
         if self.hp_field_rect.collidepoint(pos):
+            self.last_hit_rect = self.hp_field_rect
             if self.focus == 'max':
                 result = self._commit_max()
                 if result[0] is not None:
@@ -855,6 +877,7 @@ class HPPopup:
             self.hp_buf = ''
             return (None, None)
         if self.max_field_rect.collidepoint(pos):
+            self.last_hit_rect = self.max_field_rect
             if self.focus == 'hp':
                 result = self._commit_hp()
                 if result[0] is not None:
@@ -1180,10 +1203,13 @@ class ConditionsPopup:
 
     def hit(self, pos):
         """Returns ('close', None) or ('toggle', code) or (None, None)."""
+        self.last_hit_rect = None
         if self.close_rect.collidepoint(pos):
+            self.last_hit_rect = self.close_rect
             return ('close', None)
         for code, rect in self.btns:
             if rect.collidepoint(pos):
+                self.last_hit_rect = rect
                 return ('toggle', code)
         return (None, None)
 
@@ -1549,43 +1575,57 @@ class CharacterDialog:
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
             return None
         pos = event.pos
+        self.last_press_rect = None
 
         if self.close_rect.collidepoint(pos) or self.cancel_rect.collidepoint(pos):
+            self.last_press_rect = (self.close_rect if self.close_rect.collidepoint(pos)
+                                    else self.cancel_rect)
             return 'cancel'
         if self.confirm_rect.collidepoint(pos):
+            self.last_press_rect = self.confirm_rect
             self._commit_hp()
             return self._result()
         if self.name_rect.collidepoint(pos):
+            self.last_press_rect = self.name_rect
             self._commit_hp()
             self.focus = 'name'
             return None
         if self.hp_val_rect.collidepoint(pos):
+            self.last_press_rect = self.hp_val_rect
             self.focus = 'hp'
             self.hp_buf = str(self.max_hp)
             return None
         for i, rect in enumerate(self.color_rects):
             if rect.collidepoint(pos):
+                self.last_press_rect = rect
                 self.sel_color_idx = i; return None
         for i, rect in enumerate(self.size_rects):
             if rect.collidepoint(pos):
+                self.last_press_rect = rect
                 self.sel_size_idx = i; return None
         if self.hp_minus.collidepoint(pos):
+            self.last_press_rect = self.hp_minus
             self._commit_hp()
             self.max_hp = max(1, self.max_hp - 1)
         elif self.hp_plus.collidepoint(pos):
+            self.last_press_rect = self.hp_plus
             self._commit_hp()
             self.max_hp = min(999, self.max_hp + 1)
         elif self.ib_minus.collidepoint(pos):
+            self.last_press_rect = self.ib_minus
             self._commit_hp()
             self.focus = 'name'
             self.init_bonus = max(-9, self.init_bonus - 1)
         elif self.ib_plus.collidepoint(pos):
+            self.last_press_rect = self.ib_plus
             self._commit_hp()
             self.focus = 'name'
             self.init_bonus = min(20, self.init_bonus + 1)
         elif self.browse_rect.collidepoint(pos):
+            self.last_press_rect = self.browse_rect
             self._browse_image()
         elif self.npc_check_rect.collidepoint(pos):
+            self.last_press_rect = self.npc_check_rect
             self.is_npc = not self.is_npc
         return None
 
@@ -1782,16 +1822,31 @@ class EnemyDialog:
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
             return None
         pos = event.pos
+        self.last_press_rect = None
         if self.close_rect.collidepoint(pos) or self.cancel_rect.collidepoint(pos):
+            self.last_press_rect = (self.close_rect if self.close_rect.collidepoint(pos)
+                                    else self.cancel_rect)
             return 'cancel'
-        if self.confirm_rect.collidepoint(pos): return self._result()
+        if self.confirm_rect.collidepoint(pos):
+            self.last_press_rect = self.confirm_rect
+            return self._result()
         for i, rect in enumerate(self.color_rects):
-            if rect.collidepoint(pos): self.sel_color_idx = i; return None
+            if rect.collidepoint(pos):
+                self.last_press_rect = rect
+                self.sel_color_idx = i; return None
         for i, rect in enumerate(self.size_rects):
-            if rect.collidepoint(pos): self.sel_size_idx = i; return None
-        if   self.hp_minus.collidepoint(pos): self.max_hp = max(1,   self.max_hp - 1)
-        elif self.hp_plus.collidepoint(pos):  self.max_hp = min(999, self.max_hp + 1)
-        elif self.browse_rect.collidepoint(pos): self._browse_image()
+            if rect.collidepoint(pos):
+                self.last_press_rect = rect
+                self.sel_size_idx = i; return None
+        if self.hp_minus.collidepoint(pos):
+            self.last_press_rect = self.hp_minus
+            self.max_hp = max(1, self.max_hp - 1)
+        elif self.hp_plus.collidepoint(pos):
+            self.last_press_rect = self.hp_plus
+            self.max_hp = min(999, self.max_hp + 1)
+        elif self.browse_rect.collidepoint(pos):
+            self.last_press_rect = self.browse_rect
+            self._browse_image()
         return None
 
     def _result(self):
