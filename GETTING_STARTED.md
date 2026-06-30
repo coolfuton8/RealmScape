@@ -6,13 +6,13 @@ Welcome to RealmScape! This guide will walk you through everything you need to g
 
 ## What is RealmScape?
 
-RealmScape is a virtual tabletop for Dungeons & Dragons 5th Edition. It runs on your computer and shows a map on screen that you and your players can interact with. It includes:
+RealmScape is a virtual tabletop for TTRPGs. It runs on your computer and shows a map on screen that you and your players can interact with. It includes:
 
 - A map display with a scrolling grid and fog of war
 - Tokens for your player characters and monsters
 - An initiative tracker and HP / condition tracking
 - Area-of-effect templates and a distance measuring tool
-- A **DM panel** — a webpage that opens in any browser (phone, tablet, or second monitor) so you can control the game without touching the main screen
+- A **GM panel** — a webpage that opens in any browser (phone, tablet, or second monitor) so you can control the game without touching the main screen
 - Background music via Spotify or Tabletop Audio
 - Scene portals, hidden items, traps, and dungeon generation
 
@@ -21,12 +21,12 @@ RealmScape is a virtual tabletop for Dungeons & Dragons 5th Edition. It runs on 
 ## Before You Begin — What You'll Need
 
 ### 1. A Computer Running Windows or Linux
-RealmScape works on both. Mac is not currently supported.
+RealmScape works on both. Mac is not currently supported because I don't have one to test on.
 
 ### 2. Python 3.10, 3.11, or 3.12
 Python is the programming language RealmScape is built with. You need a specific version:
 
-> ⚠️ **Important:** Python **3.13 will not work**. You must install version **3.10, 3.11, or 3.12**.
+> ⚠️ **Important:** Python **3.13 will not work due to a recently added feature**. You must install version **3.10, 3.11, or 3.12**.
 
 **To check if you already have Python installed:**
 - On Windows: open the Start menu, search for **Command Prompt**, open it, and type `python --version` then press Enter.
@@ -53,7 +53,7 @@ If it shows a version between 3.10 and 3.12 (e.g. `Python 3.12.4`), you're all s
 
 ---
 
-## Step 2 — Install Dependencies
+## Step 2 — Install Dependencies (semi-automated)
 
 Dependencies are the extra software packages RealmScape needs to run. There is an installer script that handles all of this automatically.
 
