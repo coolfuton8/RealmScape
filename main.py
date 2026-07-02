@@ -1665,7 +1665,7 @@ def _apply_zone_dialog(res):
             if not build_mode:
                 build_mode_hint = HintPopup(font, small_font, WIDTH, HEIGHT,
                     "Sound Zone created — but its boundary won't be visible yet!\n\n"
-                    "Sound zone outlines only appear on the DM screen when "
+                    "Sound zone outlines only appear on the screen when"
                     "Build Mode is active.\n\n"
                     "Enable it now via Map > Build Mode.",
                     title='Important Message')
@@ -2936,7 +2936,7 @@ while running:
                         if not build_mode:
                             build_mode_hint = HintPopup(font, small_font, WIDTH, HEIGHT,
                                 "Hidden Item added — but it won't be visible yet!\n\n"
-                                "Hidden items only appear on the DM screen when "
+                                "Hidden items only appear on the screen when"
                                 "Build Mode is active.\n\n"
                                 "Enable it now via Map > Build Mode.",
                     title='Important Message')
@@ -2957,7 +2957,7 @@ while running:
                         if not build_mode:
                             build_mode_hint = HintPopup(font, small_font, WIDTH, HEIGHT,
                                 "Trap placed — but it won't be visible yet!\n\n"
-                                "Traps only appear on the DM screen when "
+                                "Traps only appear on the screen when"
                                 "Build Mode is active.\n\n"
                                 "Enable it now via Map > Build Mode.",
                     title='Important Message')
