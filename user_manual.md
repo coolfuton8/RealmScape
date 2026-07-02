@@ -9,6 +9,7 @@
 - [Welcome](#welcome)
 - [The Two Screens](#the-two-screens)
 - [Part 1 — The Toolbar at a Glance](#part-1--the-toolbar-at-a-glance)
+  - [Replaying an Adventure with a New Group](#replaying-an-adventure-with-a-new-group)
 - [Part 2 — Starting a New Campaign](#part-2--starting-a-new-campaign)
   - [2a — Creating a Campaign](#2a--creating-a-campaign)
   - [2b — Adding Your First Map](#2b--adding-your-first-map)
@@ -119,10 +120,61 @@ to open its dropdown menu.
 | **Group Move** | Toggle group movement — all characters move together when any one is dragged |
 | **Zoom slider** | Drag left to zoom out, right to zoom in. Zoom is saved per scene |
 | **Set As Starting Scene** | Mark the current scene as the first scene loaded when the campaign opens |
-| **Undo** | Undo the last token move |
+| **Undo** | Revert the most recent token drag to its previous position. Each drag is saved to a 20-move history, so you can press Undo repeatedly to step back through multiple moves. Only token movement is undoable — HP changes, conditions, and initiative are not affected. Keyboard shortcut: **Ctrl+Z** |
 | **Party Home** | Move all player tokens to the top-left corner and reset the camera |
-| **Set Initial State** | Save the current token positions as the scene's starting state |
-| **Revert Scene** | Restore all tokens to their saved initial state |
+| **Set Initial State** | Capture a complete snapshot of this scene's current state — enemy and NPC positions, HP, conditions, initiative values, hidden item locations, trap states, and scene marker positions. This snapshot is stored permanently in the campaign database. |
+| **Revert Scene** | Restore this scene to the last saved snapshot: enemies and NPCs reappear at their original positions with full HP and cleared conditions, hidden items reset to undiscovered, and traps reset to untriggered. Player characters are never affected. |
+
+---
+
+### Replaying an Adventure with a New Group
+
+**Set Initial State** and **Revert Scene** are designed to work together as a preparation and reset system, making it straightforward to run the same adventure multiple times — for a second play group, a convention one-shot, or a school session.
+
+#### What gets saved
+
+When you press **Set Initial State** on a scene, RealmScape captures a complete snapshot of everything scene-specific at that moment:
+
+| Saved | Not saved |
+|---|---|
+| Enemy and NPC positions | Player characters (they are global, not scene-specific) |
+| Enemy and NPC HP (current and max) | Background map image |
+| Enemy and NPC conditions | Fog of war state |
+| Initiative values | Camera position and zoom |
+| Hidden item positions, DCs, and descriptions | Scene notes |
+| Trap positions and descriptions | Music / sound zone settings |
+| Scene marker (portal) positions | |
+
+Each scene has its own independent snapshot. You can set the initial state of individual scenes at different times as you finish preparing them.
+
+#### The replay workflow
+
+**Step 1 — Prepare your adventure as normal**
+
+Place enemies, NPCs, hidden items, traps, and scene markers across all your scenes. Adjust HP values, assign stat blocks, and position everything exactly as it should be at the start of the adventure.
+
+**Step 2 — Save the initial state of each scene**
+
+Navigate to each scene and press **Map → Set Initial State**. Do this for every scene that contains content you want to be able to restore. The **Revert Scene** button will be greyed out until at least one snapshot has been saved for the current scene.
+
+**Step 3 — Run the session**
+
+Play normally. Enemies are killed, items are found, traps are triggered, tokens are moved. Everything changes as it should during play.
+
+**Step 4 — Reset for the next group**
+
+You have two options:
+
+- **Scene by scene** — navigate to each scene and press **Map → Revert Scene**. RealmScape will ask for confirmation, then restore that scene's content to the snapshot.
+- **All at once** — press **Campaign → Reset Campaign**. This reverts every scene in the campaign that has a saved snapshot simultaneously, in a single operation. This is the fastest way to prepare for the next group.
+
+After a revert, all enemies and NPCs reappear at their original positions with their original HP, all hidden items are unfound, and all traps are reset to untriggered. The initiative tracker is also cleared.
+
+> **Note:** Player characters are intentionally excluded from the revert system. Their positions, HP, and conditions belong to the players and persist across sessions regardless of any scene reset.
+
+#### Updating a snapshot mid-campaign
+
+If you change your encounter design after the first session — repositioning enemies, adjusting HP, adding new items — simply set up the scene the way you want it and press **Set Initial State** again. The new snapshot replaces the previous one.
 
 ---
 
@@ -671,8 +723,7 @@ rejected at the hardware level.
   has a printed grid.
 - **Party Home** — Map → Party Home instantly moves all player tokens to the top-left corner and
   resets the camera. Handy after a scene reset.
-- **Revert Scene** — Map → Revert Scene restores all token positions to the saved initial state.
-  Use Map → Set Initial State first to establish that baseline.
+- **Revert Scene / Set Initial State** — use these together to replay the same adventure with a new group. See [Replaying an Adventure with a New Group](#replaying-an-adventure-with-a-new-group) for the full workflow, including the one-click **Campaign → Reset Campaign** option that reverts all scenes at once.
 - **Initiative Bonus** — set each character's DEX modifier under Character Settings. It is added
   automatically every time you roll initiative.
 - **Lock Screen** — Campaign → Lock PIN-protects the RealmScape window so players cannot tap

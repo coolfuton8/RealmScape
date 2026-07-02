@@ -722,7 +722,17 @@ async function manualCode() {{
         except FileNotFoundError:
             return '<h2>user_manual.md not found.</h2>', 404
 
-        body = _md.markdown(raw, extensions=['tables', 'fenced_code', 'toc'])
+        import re as _re
+        def _slugify(value, sep):
+            # Treat em/en dash (with surrounding spaces) as a double separator,
+            # matching the -- style used in the manual's TOC links.
+            value = _re.sub(r'\s*[—–]\s*', sep * 2, value)
+            value = _re.sub(r'[^\w\s-]', '', value).strip().lower()
+            value = _re.sub(r'\s+', sep, value)
+            return value
+
+        body = _md.markdown(raw, extensions=['tables', 'fenced_code', 'toc'],
+                            extension_configs={'toc': {'slugify': _slugify}})
         html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
