@@ -1164,6 +1164,7 @@ def _load_init_msg(campaign=None):
 
 init_msg_popup      = None
 _init_msg_pending   = db.get_hints_enabled()   # show after first map frame
+build_mode_hint     = None                     # one-shot build-mode reminder
 
 aoe_tool         = AoeTool()
 measure_tool     = MeasureTool()
@@ -1650,6 +1651,7 @@ def _apply_zone_dialog(res):
         zone_dialog = None
         zone_dialog_is_default = False
     elif res == 'confirm' and zone_dialog and zone_dialog.result:
+        global build_mode_hint
         d = zone_dialog.result
         is_def = zone_dialog_is_default
         zone_dialog = None
@@ -1660,6 +1662,13 @@ def _apply_zone_dialog(res):
         else:
             db.add_sound_zone(d['name'], d['x'], d['y'], d['w'], d['h'],
                               d['track'], d['color'], sid)
+            if not build_mode:
+                build_mode_hint = HintPopup(font, small_font, WIDTH, HEIGHT,
+                    "Sound Zone created — but its boundary won't be visible yet!\n\n"
+                    "Sound zone outlines only appear on the DM screen when "
+                    "Build Mode is active.\n\n"
+                    "Enable it now via Map > Build Mode.",
+                    title='Important Message')
         reload_sound_zones()
         dm_server.broadcast_state(_get_dm_state())
 
@@ -2924,6 +2933,13 @@ while running:
                         hidden_items.append(HiddenItem(new_id, scene_id(), px, py,
                                                        r['radius'], r['dc'],
                                                        r['description'], False))
+                        if not build_mode:
+                            build_mode_hint = HintPopup(font, small_font, WIDTH, HEIGHT,
+                                "Hidden Item added — but it won't be visible yet!\n\n"
+                                "Hidden items only appear on the DM screen when "
+                                "Build Mode is active.\n\n"
+                                "Enable it now via Map > Build Mode.",
+                    title='Important Message')
                     _place_item_dialog = None
                     _place_pending_pos = None
                 continue
@@ -2938,6 +2954,13 @@ while running:
                                                    r['radius'], r['description'])
                         scene_traps_list.append(SceneTrap(new_id, scene_id(), px, py,
                                                           r['radius'], r['description'], False))
+                        if not build_mode:
+                            build_mode_hint = HintPopup(font, small_font, WIDTH, HEIGHT,
+                                "Trap placed — but it won't be visible yet!\n\n"
+                                "Traps only appear on the DM screen when "
+                                "Build Mode is active.\n\n"
+                                "Enable it now via Map > Build Mode.",
+                    title='Important Message')
                     _place_trap_dialog = None
                     _place_pending_pos = None
                 continue
@@ -2972,6 +2995,11 @@ while running:
             if init_msg_popup:
                 if init_msg_popup.handle_event(event):
                     init_msg_popup = None
+                continue
+
+            if build_mode_hint:
+                if build_mode_hint.handle_event(event):
+                    build_mode_hint = None
                 continue
 
             # DC roll popup
@@ -4006,6 +4034,7 @@ while running:
         _init_msg_pending = False
 
     if init_msg_popup:         init_msg_popup.draw(screen)
+    if build_mode_hint:        build_mode_hint.draw(screen)
 
     # Check dungeongen background thread for completion
     if dungeon_gen_dialog and not _gen_queue.empty():

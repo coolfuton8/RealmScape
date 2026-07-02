@@ -1873,11 +1873,12 @@ class HintPopup:
     _ACCENT  = (230, 200, 80)
     _URL_COL = (100, 190, 255)
 
-    def __init__(self, font, small_font, screen_w, screen_h, hint_text):
+    def __init__(self, font, small_font, screen_w, screen_h, hint_text, title='Initial Message'):
         import re
         self.font        = font
         self.small_font  = small_font
         self.text        = hint_text
+        self._title      = title
         self._url_re     = re.compile(r'(https?://\S+)')
         self._lh         = font.get_linesize()
         self._url_rects  = []
@@ -1960,7 +1961,7 @@ class HintPopup:
         pygame.draw.rect(surface, PANEL_BG,        self._rect, border_radius=10)
         pygame.draw.rect(surface, self._ACCENT,    self._rect, 2,  border_radius=10)
 
-        title = self.font.render('Initial Message', True, self._ACCENT)
+        title = self.font.render(self._title, True, self._ACCENT)
         surface.blit(title, (self.x + self.PAD, self.y + 10))
 
         # Clip content area
