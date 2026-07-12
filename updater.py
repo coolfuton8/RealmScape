@@ -137,6 +137,18 @@ def download_and_apply_update():
                 'Update partially applied. These items could not be updated '
                 '(old versions were restored where possible):\n' + '\n'.join(failed))
 
+        # GitHub's archive download doesn't preserve the executable bit, so
+        # every .sh script loses it after being replaced. Restore it here
+        # (a no-op on Windows, where the executable bit doesn't apply).
+        if os.name == 'posix':
+            for fn in os.listdir(APP_DIR):
+                if fn.endswith('.sh'):
+                    path = os.path.join(APP_DIR, fn)
+                    try:
+                        os.chmod(path, os.stat(path).st_mode | 0o111)
+                    except OSError:
+                        pass
+
         # Best-effort dependency refresh — new releases may add packages.
         req = os.path.join(APP_DIR, 'requirements.txt')
         if os.path.isfile(req):
