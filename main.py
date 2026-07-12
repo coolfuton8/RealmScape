@@ -39,6 +39,7 @@ from feedback  import sound_fx, press_fx
 import campaigns as campaigns_mod
 import server as dm_server
 import updater
+import posthog_client as ph
 
 # ── Campaign init (must happen before db.init_db) ────────────────────────────
 campaigns_mod.migrate_legacy_db()
@@ -989,6 +990,10 @@ def _handle_dm_command(cmd):
 
     elif t == 'roll_initiative':
         print('[Initiative Roll]')
+        ph.capture('initiative_rolled', {
+            'character_count': len(characters),
+            'enemy_count':     len(enemies),
+        })
         for ent in enemies:
             roll = random.randint(1, 20)
             ent.initiative = roll
@@ -1100,6 +1105,7 @@ def _handle_dm_command(cmd):
         name = cmd.get('name', '')
         if name and campaigns_mod.is_valid_name(name):
             campaigns_mod.create(name)
+            ph.capture('campaign_created', {'total_campaigns': len(campaigns_mod.list_campaigns()) + 1})
             switch_campaign(name)
             return
 
@@ -1107,11 +1113,13 @@ def _handle_dm_command(cmd):
         name = cmd.get('name', '')
         if name and name != active_campaign:
             campaigns_mod.delete(name)
+            ph.capture('campaign_deleted', {'remaining_campaigns': len(campaigns_mod.list_campaigns())})
 
     elif t == 'rename_campaign':
         old, new = cmd.get('old', ''), cmd.get('new', '')
         if old and new and campaigns_mod.is_valid_name(new):
             if campaigns_mod.rename(old, new):
+                ph.capture('campaign_renamed')
                 if old == active_campaign:
                     active_campaign = new
                     db.set_db_path(campaigns_mod.db_path(new))  # release old handle first
@@ -1255,6 +1263,13 @@ def _accept_generated_scene():
     path  = _pending_gen_path
     sname = dungeon_gen_dialog.result.get('scene_name', 'Generated Dungeon') \
             if dungeon_gen_dialog and dungeon_gen_dialog.result else 'Generated Dungeon'
+    _gen_params = (dungeon_gen_dialog.result or {}) if dungeon_gen_dialog else {}
+    ph.capture('dungeon_generated', {
+        'size':      _gen_params.get('size', ''),
+        'archetype': _gen_params.get('archetype', ''),
+        'symmetry':  _gen_params.get('symmetry', ''),
+        'levels':    _gen_params.get('levels', 1),
+    })
     rel    = campaigns_mod.make_relative_path(path)
     new_id = db.add_scene(sname, rel, int(camera_x), int(camera_y))
     scenes.append((new_id, sname, rel, int(camera_x), int(camera_y)))
@@ -1405,6 +1420,7 @@ def switch_scene(new_idx):
     _item_cooldowns.clear()
     active_zone_id = None
     _zone_stop()
+    ph.capture('scene_switched', {'scene_count': len(scenes)})
 
 def switch_campaign(name: str):
     """Save current state, swap the DB, and reload everything from the new campaign."""
@@ -1415,6 +1431,7 @@ def switch_campaign(name: str):
     target_entity = None
     _transient_markers.clear()
 
+    ph.capture('campaign_switched')
     _save_current_scene_state()
 
     campaigns_mod.set_active(name)
@@ -2619,6 +2636,13 @@ def _any_modal_open():
         conditions_popup, context_menu,
     ])
 
+
+ph.capture('app_launched', {
+    'version':        updater.get_current_version(),
+    'platform':       _sys.platform,
+    'campaign_count': len(campaigns_mod.list_campaigns()),
+    'scene_count':    len(scenes),
+})
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 running = True
