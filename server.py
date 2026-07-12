@@ -635,6 +635,7 @@ async function manualCode() {{
             # Deliberately does NOT lock immediately — the DM just typed this
             # PIN in order to Save right now; it only takes effect (requires
             # entry) the next time this campaign is loaded/switched to.
+            cmd_queue.put({'type': '_request_state'})   # refresh has_pin caches
             return jsonify({'ok': True})
         except Exception as e:
             return jsonify({'error': str(e)}), 500

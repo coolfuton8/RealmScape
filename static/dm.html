@@ -2265,7 +2265,7 @@ function setupPad(key) {
   if (key === 'CLR') {
     cur = cur.slice(0, -1);
   } else if (key === 'OK') {
-    if (!cur) { err.textContent = 'Enter at least 1 digit'; return; }
+    if (cur.length < 4) { err.textContent = 'PIN must be at least 4 digits'; return; }
     if (_setupPhase === 1) {
       _setupPin1 = cur; _setupPin2 = ''; _setupPhase = 2;
       phase.textContent = 'Confirm PIN:';
@@ -2283,7 +2283,11 @@ function setupPad(key) {
       .then(r => r.json()).then(d => {
         if (d.ok) {
           closePinSetup();
-          exportCampaign(target);   // proceed with the Save the DM asked for
+          // Export directly instead of routing through exportCampaign()'s
+          // hasPin check — that reads a client-side cache (G.campaign.has_pin)
+          // that hasn't caught up with the PIN we just set yet, which would
+          // incorrectly reopen this same PIN-setup screen.
+          window.location.href = '/api/campaigns/' + encodeURIComponent(target) + '/export';
         } else { err.textContent = d.error || 'Error'; }
       }).catch(() => { err.textContent = 'Network error'; });
       return;
