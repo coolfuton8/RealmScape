@@ -1876,7 +1876,7 @@ def apply_enemy_dialog(result):
 # ── Zoom helper ───────────────────────────────────────────────────────────────
 
 def _apply_zoom(new_zoom, save=True):
-    global current_zoom
+    global current_zoom, camera_x, camera_y
     current_zoom = max(0.1, min(5.0, round(new_zoom, 2)))
     toolbar.zoom_level = current_zoom
     s = current_scene()
@@ -1885,6 +1885,11 @@ def _apply_zoom(new_zoom, save=True):
     if layers:
         layers[0].update(camera_x, camera_y)
         layers[0].clamp(WIDTH, HEIGHT - TOOLBAR_HEIGHT)
+        # Re-clamping the new (differently-sized) canvas can move the layer
+        # to a position that no longer matches camera_x/camera_y — resync,
+        # or every token/fog draw (which uses camera_x/camera_y directly)
+        # would drift out of alignment with the repositioned background.
+        camera_x, camera_y = -layers[0].x, -layers[0].y
     if save and s:
         db.save_scene_zoom(s[0], current_zoom)
 
