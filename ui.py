@@ -2077,8 +2077,9 @@ class HintPopup:
         surface.blit(t, (self._ok_rect.centerx - t.get_width() // 2,
                          self._ok_rect.centery - t.get_height() // 2))
 
-        tip = self.small_font.render('Toggle: Campaign › Show initial message on load', True, GRAY)
-        surface.blit(tip, (self.x + self.PAD, self.y + self._rect.h - self.PAD - 14))
+        if self._title == 'Initial Message':
+            tip = self.small_font.render('Toggle: Campaign › Show initial message on load', True, GRAY)
+            surface.blit(tip, (self.x + self.PAD, self.y + self._rect.h - self.PAD - 14))
 
     # ── Events ───────────────────────────────────────────────────────────────
 
