@@ -1976,7 +1976,7 @@ def _update_snapshot_btn():
 # ── Confirmation popup actions ────────────────────────────────────────────────
 
 def _apply_confirm(pending):
-    global scenes, current_scene_idx, _update_apply_in_progress, init_msg_popup
+    global scenes, current_scene_idx, _update_apply_in_progress
     if pending == 'scene_del':
         if scenes:
             db.delete_scene(scene_id())
@@ -1994,9 +1994,6 @@ def _apply_confirm(pending):
     elif pending == 'app_update':
         if not _update_apply_in_progress:
             _update_apply_in_progress = True
-            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
-                "Downloading the update... this may take a minute.",
-                title='Please Wait')
             threading.Thread(target=_bg_apply_update, daemon=True,
                              name='update-apply').start()
 
