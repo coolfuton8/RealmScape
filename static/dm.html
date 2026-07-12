@@ -2057,13 +2057,13 @@ function renderCampaignList() {
       sw.style.cssText = 'background:#1e40af;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;';
       sw.onclick = () => switchCampaign(name);
       row.appendChild(sw);
-      if (name !== 'default') {
-        const del = document.createElement('button');
-        del.textContent = 'Delete';
-        del.style.cssText = 'background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;';
-        del.onclick = () => deleteCampaign(name);
-        row.appendChild(del);
-      }
+    }
+    if (name !== 'default') {
+      const del = document.createElement('button');
+      del.textContent = 'Delete';
+      del.style.cssText = 'background:#7f1d1d;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;';
+      del.onclick = () => deleteCampaign(name, isActive);
+      row.appendChild(del);
     }
     list.appendChild(row);
   }
@@ -2146,10 +2146,13 @@ async function createCampaign(andSwitch) {
 }
 
 
-async function deleteCampaign(name) {
+async function deleteCampaign(name, isActive) {
   const err = document.getElementById('campaign-modal-err');
   err.textContent = '';
-  if (!confirm(`Delete campaign "${name}"? This cannot be undone.`)) return;
+  const warning = isActive
+    ? `Delete campaign "${name}"? This cannot be undone.\n\nThis is the active campaign — RealmScape will switch to the default campaign afterward.`
+    : `Delete campaign "${name}"? This cannot be undone.`;
+  if (!confirm(warning)) return;
   try {
     const r = await fetch(`/api/campaigns/${encodeURIComponent(name)}`, { method: 'DELETE' });
     const data = await r.json();

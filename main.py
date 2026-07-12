@@ -1131,8 +1131,19 @@ def _handle_dm_command(cmd):
 
     elif t == 'delete_campaign':
         name = cmd.get('name', '')
-        if name and name != active_campaign:
-            campaigns_mod.delete(name)
+        if name and name != 'default':
+            if name == active_campaign:
+                # Switch away first so the DB handle is released before
+                # removing the folder, then land on default instead of a
+                # deleted campaign.
+                switch_campaign('default')
+                dm_server.broadcast_state(_get_dm_state())
+                # Windows can briefly hold the just-closed DB file locked —
+                # remove_dir() retries in a background thread instead of
+                # raising.
+                campaigns_mod.remove_dir(name)
+            else:
+                campaigns_mod.delete(name)
 
     elif t == 'rename_campaign':
         old, new = cmd.get('old', ''), cmd.get('new', '')
@@ -1789,10 +1800,18 @@ def _apply_campaign_dialog(action):
             campaign_dialog = None
             switch_campaign(name)
             dm_server.broadcast_state(_get_dm_state())
-    elif kind == 'delete' and name:
-        if name != active_campaign:
+    elif kind == 'delete' and name and name != 'default':
+        if name == active_campaign:
+            # Switch away first so the DB handle is released before removing
+            # the folder, then land on default instead of a deleted campaign.
+            switch_campaign('default')
+            dm_server.broadcast_state(_get_dm_state())
+            # Windows can briefly hold the just-closed DB file locked —
+            # remove_dir() retries in a background thread instead of raising.
+            campaigns_mod.remove_dir(name)
+        else:
             campaigns_mod.delete(name)
-            _campaign_dialog_refresh()
+        _campaign_dialog_refresh()
 
     elif kind == 'rename':
         old, new = action.get('old', ''), action.get('new', '')
@@ -2055,9 +2074,19 @@ def _apply_confirm(pending):
     elif pending == 'delete_campaign_quick':
         global _pending_delete_campaign
         name = _pending_delete_campaign
-        if name and name != 'default' and name != active_campaign:
-            campaigns_mod.delete(name)
-            dm_server.broadcast_state(_get_dm_state())
+        if name and name != 'default':
+            if name == active_campaign:
+                # Switch away first so the DB handle on `name` is released,
+                # then land on default instead of a deleted campaign.
+                switch_campaign('default')
+                dm_server.broadcast_state(_get_dm_state())
+                # Windows can briefly hold the just-closed DB file locked —
+                # remove_dir() retries in a background thread instead of
+                # raising, same as the rename/import-overwrite flows.
+                campaigns_mod.remove_dir(name)
+            else:
+                campaigns_mod.delete(name)
+                dm_server.broadcast_state(_get_dm_state())
         _pending_delete_campaign = None
 
 # ── Self-update (check GitHub, download, and apply in place) ─────────────────
@@ -3257,9 +3286,12 @@ while running:
                 elif isinstance(result, tuple) and result[0] == 'delete':
                     _pending_delete_campaign = result[1]
                     delete_campaign_popup = None
+                    _extra = ('\n\nThis is your active campaign — RealmScape '
+                              'will switch to the default campaign afterward.'
+                              if result[1] == active_campaign else '')
                     confirm_popup = ConfirmPopup(
                         f'Delete campaign "{result[1]}"?\n\n'
-                        f'This cannot be undone.',
+                        f'This cannot be undone.{_extra}',
                         font, WIDTH, HEIGHT)
                     confirm_popup._pending = 'delete_campaign_quick'
                 continue

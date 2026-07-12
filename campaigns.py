@@ -106,16 +106,20 @@ def remove_dir(name: str):
     """Delete a campaign folder in a background thread with retries.
 
     Windows (Defender, Search indexer) can briefly lock newly-copied files.
-    Running in a daemon thread avoids blocking the pygame main loop.
+    A just-closed sqlite3 connection can also hold the DB file open until
+    Python garbage-collects it, which a plain sleep loop won't trigger on
+    its own — gc.collect() forces that before each attempt. Running in a
+    daemon thread avoids blocking the pygame main loop.
     """
     path = campaign_path(name)
     if not os.path.isdir(path):
         return
 
     def _delete():
-        import time
+        import gc, time
         for _ in range(20):          # up to ~10 seconds of retries
             try:
+                gc.collect()
                 shutil.rmtree(path)
                 return
             except OSError:

@@ -524,10 +524,15 @@ async function manualCode() {{
     def _api_campaigns_delete(name):
         try:
             import campaigns as cm
-            if name == cm.get_active():
-                return jsonify({'error': 'Cannot delete the active campaign'}), 400
             if name == 'default':
                 return jsonify({'error': 'Cannot delete the default campaign'}), 400
+            if name == cm.get_active():
+                # Deleting the active campaign's folder here (in the Flask
+                # thread) would race the pygame thread's open DB handle on
+                # it. Hand the whole switch-away-then-delete sequence to the
+                # pygame thread instead, same as the desktop quick-delete.
+                cmd_queue.put({'type': 'delete_campaign', 'name': name})
+                return jsonify({'ok': True})
             ok = cm.delete(name)
             cmd_queue.put({'type': 'delete_campaign', 'name': name})
             return jsonify({'ok': ok})

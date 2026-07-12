@@ -3351,7 +3351,7 @@ class CampaignDialog:
             for i, r in enumerate(self._del_rects):
                 if r.collidepoint(pos):
                     name = self.campaigns[i]
-                    if name != 'default' and name != self.active:
+                    if name != 'default':
                         self.result = {'action': 'delete', 'name': name}
                         return self.result
                     return None
@@ -3452,7 +3452,7 @@ class CampaignDialog:
             tag = '  [active]' if is_active else ''
             lbl = self.font.render(name + tag, True, WHITE)
             surface.blit(lbl, (r.x + 10, r.centery - lbl.get_height() // 2))
-            if name != 'default' and not is_active:
+            if name != 'default':
                 pygame.draw.rect(surface, (130, 40, 40), dr, border_radius=4)
                 dl = self.font.render('Del', True, WHITE)
                 surface.blit(dl, (dr.centerx - dl.get_width() // 2,
@@ -3895,8 +3895,9 @@ class NewSceneChoicePopup:
 
 class QuickDeleteCampaignDialog:
     """Compact Campaign-menu control: a dropdown to pick a campaign (never
-    lists 'default' or the currently active one) plus a Delete button.
-    hit() returns ('delete', name), 'cancel', or None (still open)."""
+    lists 'default', but the currently active campaign IS selectable —
+    deleting it switches the app to 'default' automatically) plus a Delete
+    button. hit() returns ('delete', name), 'cancel', or None (still open)."""
     W = 300
     ROW_H = 34
     PAD = 10
@@ -3904,7 +3905,8 @@ class QuickDeleteCampaignDialog:
 
     def __init__(self, campaigns, active, font, screen_w, screen_h):
         self.font      = font
-        self.options   = [c for c in campaigns if c not in ('default', active)]
+        self.active    = active
+        self.options   = [c for c in campaigns if c != 'default']
         self.selected  = self.options[0] if self.options else None
         self._expanded = False
         self.H = self.TITLE_H + self.PAD * 3 + self.ROW_H * 2
@@ -3940,7 +3942,9 @@ class QuickDeleteCampaignDialog:
         # Dropdown box
         pygame.draw.rect(surface, TOOLBAR_BTN,   self._box_r, border_radius=5)
         pygame.draw.rect(surface, PANEL_BORDER,  self._box_r, 1, border_radius=5)
-        label = self.selected or 'No other campaigns'
+        label = 'No other campaigns'
+        if self.selected:
+            label = self.selected + ('  [active]' if self.selected == self.active else '')
         lt = self.font.render(label, True, WHITE if self.selected else GRAY)
         surface.blit(lt, (self._box_r.x + 8, self._box_r.centery - lt.get_height() // 2))
         if self.options:
@@ -3961,7 +3965,8 @@ class QuickDeleteCampaignDialog:
             for name, r in self._option_rects:
                 pygame.draw.rect(surface, (40, 44, 56), r)
                 pygame.draw.rect(surface, PANEL_BORDER, r, 1)
-                t = self.font.render(name, True, WHITE)
+                label = name + ('  [active]' if name == self.active else '')
+                t = self.font.render(label, True, WHITE)
                 surface.blit(t, (r.x + 8, r.centery - t.get_height() // 2))
 
     def hit(self, pos):
