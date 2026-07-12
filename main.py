@@ -38,6 +38,7 @@ import db
 from feedback  import sound_fx, press_fx
 import campaigns as campaigns_mod
 import server as dm_server
+import updater
 
 # ── Campaign init (must happen before db.init_db) ────────────────────────────
 campaigns_mod.migrate_legacy_db()
@@ -1954,7 +1955,7 @@ def _update_snapshot_btn():
 # ── Confirmation popup actions ────────────────────────────────────────────────
 
 def _apply_confirm(pending):
-    global scenes, current_scene_idx
+    global scenes, current_scene_idx, _update_apply_in_progress, init_msg_popup
     if pending == 'scene_del':
         if scenes:
             db.delete_scene(scene_id())
@@ -1969,6 +1970,29 @@ def _apply_confirm(pending):
         _update_snapshot_btn()
     elif pending == 'campaign_reset':
         _apply_campaign_reset()
+    elif pending == 'app_update':
+        if not _update_apply_in_progress:
+            _update_apply_in_progress = True
+            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
+                "Downloading the update... this may take a minute.",
+                title='Please Wait')
+            threading.Thread(target=_bg_apply_update, daemon=True,
+                             name='update-apply').start()
+
+# ── Self-update (check GitHub, download, and apply in place) ─────────────────
+
+_update_check_queue      = queue.Queue()   # thread → main: (latest, error)
+_update_apply_queue      = queue.Queue()   # thread → main: (success, message)
+_update_check_in_progress = False
+_update_apply_in_progress = False
+
+def _bg_check_for_update():
+    latest, err = updater.check_for_update()
+    _update_check_queue.put({'latest': latest, 'error': err})
+
+def _bg_apply_update():
+    success, message = updater.download_and_apply_update()
+    _update_apply_queue.put({'success': success, 'message': message})
 
 # ── Handle toolbar action ─────────────────────────────────────────────────────
 
@@ -1980,6 +2004,7 @@ def handle_toolbar(btn_id):
     global _edit_item_dialog, _edit_trap_dialog, _edit_item_obj, _edit_trap_obj
     global dc_roll_popup, dc_result_popup, trap_flash_timer, init_msg_popup, _init_msg_pending
     global build_mode, _pre_build_fog
+    global _update_check_in_progress
 
     if btn_id == 'add_enemy':
         mx, my = pygame.mouse.get_pos()
@@ -2122,6 +2147,12 @@ def handle_toolbar(btn_id):
 
     elif btn_id == 'setup_pin':
         pin_setup_dialog = PinSetupDialog(font, WIDTH, HEIGHT)
+
+    elif btn_id == 'check_update':
+        if not _update_check_in_progress:
+            _update_check_in_progress = True
+            threading.Thread(target=_bg_check_for_update, daemon=True,
+                             name='update-check-manual').start()
 
     elif btn_id == 'set_start':
         global start_scene_id
@@ -2577,6 +2608,18 @@ def _apply_hp_popup(kind, val):
             db.update_character_max_hp(ent.id, ent.max_hp)
             db.update_character_hp(ent.id, ent.hp)
 
+def _any_modal_open():
+    """True if any dialog/popup is currently covering the map."""
+    return any([
+        _place_item_dialog, _place_trap_dialog, _edit_item_dialog, _edit_trap_dialog,
+        init_msg_popup, build_mode_hint, dc_roll_popup, dc_result_popup, tta_browser,
+        zone_dialog, campaign_dialog, char_dialog, enemy_dialog, size_popup,
+        stat_block_panel, notes_panel.visible, new_scene_popup, dungeon_gen_dialog,
+        scene_picker, confirm_popup, group_hp_popup, num_input_popup, hp_popup,
+        conditions_popup, context_menu,
+    ])
+
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 running = True
 clock   = pygame.time.Clock()
@@ -2758,10 +2801,50 @@ while running:
                 'start': (fx, fy), 'last': (fx, fy),
                 'start_time': now, 'moved': False, 'fired_lp': False
             }
-            # Cancel entity drag if second finger goes down
-            if len(touch_fingers) >= 2 and dragged_ent:
-                dragging   = False
-                dragged_ent = None
+            # First finger down on the map — grab a marker/token to drag, mirroring
+            # the mouse's press-to-start-drag behavior (markers take priority).
+            if len(touch_fingers) == 1 and not _any_modal_open():
+                fake_pos = (fx, fy)
+                map_pos  = (fx, fy - TOOLBAR_HEIGHT)
+                if not toolbar.is_over(fake_pos):
+                    renaming_char     = None
+                    dragged_ent       = None
+                    dragged_marker    = None
+                    marker_drag_start = None
+                    for mk in scene_markers:
+                        if mk.is_clicked(fake_pos, camera_x, camera_y, TOOLBAR_HEIGHT):
+                            dragged_marker    = mk
+                            marker_drag_start = fake_pos
+                            sound_fx.play('select')
+                            break
+                    if not dragged_marker:
+                        for ent in characters + enemies:
+                            if ent.is_clicked(map_pos, camera_x, camera_y):
+                                dragged_ent = ent
+                                dragging    = True
+                                sound_fx.play('pickup')
+                                _is_party = not ent.is_enemy and not getattr(ent, 'is_npc', False)
+                                if toolbar.active.get('group_move') and _is_party:
+                                    _gm_party = [c for c in characters if not getattr(c, 'is_npc', False)]
+                                    for e in _gm_party:
+                                        undo_stack.append((e, e.x, e.y))
+                                    target_entity = None
+                                else:
+                                    undo_stack.append((ent, ent.x, ent.y))
+                                    if target_entity is not None and target_entity is not ent:
+                                        target_entity = None
+                                if len(undo_stack) > MAX_UNDO:
+                                    del undo_stack[:len(undo_stack) - MAX_UNDO]
+                                for c in characters: c.selected = (c == ent)
+                                break
+            # Cancel entity/marker drag if a second finger goes down (switch to pan)
+            if len(touch_fingers) >= 2:
+                if dragged_ent:
+                    dragging   = False
+                    dragged_ent = None
+                if dragged_marker:
+                    dragged_marker    = None
+                    marker_drag_start = None
 
         elif event.type == pygame.FINGERMOTION:
             fx = int(event.x * WIDTH)
@@ -2785,12 +2868,23 @@ while running:
                         layer.clamp(WIDTH, HEIGHT - TOOLBAR_HEIGHT)
                     if layers:
                         camera_x, camera_y = -layers[0].x, -layers[0].y
+                elif dragged_marker:
+                    dragged_marker.x = fx + camera_x
+                    dragged_marker.y = fy - TOOLBAR_HEIGHT + camera_y
                 elif dragging and dragged_ent:
                     dragged_ent.x = fx + camera_x
                     dragged_ent.y = fy - TOOLBAR_HEIGHT + camera_y
 
         elif event.type == pygame.FINGERUP:
             fd = touch_fingers.pop(event.finger_id, None)
+            if fd and (dragged_ent or dragged_marker):
+                # Finish the single-finger token/marker drag started on FINGERDOWN —
+                # reuse the exact same finalize logic as a real mouse-button release
+                # instead of duplicating the DB-save / group-move / portal-tap code.
+                fx, fy = fd['last']
+                pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP,
+                                                     {'button': 1, 'pos': (fx, fy)}))
+                continue
             if fd and not fd['moved'] and not fd['fired_lp']:
                 # Tap — treat as left-click
                 fx, fy = fd['last']
@@ -2806,14 +2900,7 @@ while running:
                 # second, hand-maintained copy of this logic in sync per-dialog (the
                 # previous approach, which is how several dialogs ended up unreachable
                 # by touch — they were simply never added to that list).
-                if any([
-                    _place_item_dialog, _place_trap_dialog, _edit_item_dialog, _edit_trap_dialog,
-                    init_msg_popup, build_mode_hint, dc_roll_popup, dc_result_popup, tta_browser,
-                    zone_dialog, campaign_dialog, char_dialog, enemy_dialog, size_popup,
-                    stat_block_panel, notes_panel.visible, new_scene_popup, dungeon_gen_dialog,
-                    scene_picker, confirm_popup, group_hp_popup, num_input_popup, hp_popup,
-                    conditions_popup, context_menu,
-                ]):
+                if _any_modal_open():
                     pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN,
                                                          {'button': 1, 'pos': fake_pos}))
                     pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP,
@@ -3970,6 +4057,36 @@ while running:
             dungeon_gen_dialog.set_preview(gen_result['path'])
         else:
             dungeon_gen_dialog.set_error(gen_result['error'])
+
+    # Self-update — surface the result of a manual "Check for Updates" click
+    if not _update_check_queue.empty():
+        _upd = _update_check_queue.get_nowait()
+        _update_check_in_progress = False
+        if _upd['latest']:
+            confirm_popup = ConfirmPopup(
+                f"A new version of RealmScape is available!\n\n"
+                f"Installed: v{updater.get_current_version()}\n"
+                f"Available: v{_upd['latest']}\n\n"
+                f"Download and install it now?\n"
+                f"Your campaigns will not be affected.",
+                font, WIDTH, HEIGHT)
+            confirm_popup._pending = 'app_update'
+        elif _upd['error']:
+            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
+                f"Could not check for updates:\n\n{_upd['error']}",
+                title='Update Check Failed')
+        else:
+            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
+                f"You're running the latest version "
+                f"(v{updater.get_current_version()}).",
+                title='Up To Date')
+
+    # Self-update — surface the result of an in-progress download/install
+    if not _update_apply_queue.empty():
+        _updr = _update_apply_queue.get_nowait()
+        _update_apply_in_progress = False
+        init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT, _updr['message'],
+            title='Update Complete' if _updr['success'] else 'Update Failed')
 
     # Load a cached audio file signalled by the download thread
     with _pending_music_lock:

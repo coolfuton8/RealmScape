@@ -715,6 +715,15 @@ rejected at the hardware level.
 | Drag image file onto map | Set the scene's background map image |
 | Scroll wheel | Scroll entity list in Group Damage/Heal dialog (when open) |
 
+### Touch Controls (Map Window)
+
+| Action | Result |
+|--------|--------|
+| Tap | Select a token, or press a button/dialog control |
+| Drag on token or scene marker | Move it |
+| Two-finger drag | Pan the camera |
+| Long-press | Open the context menu (same as right-click) |
+
 ---
 
 ## Part 6 — Tips and Tricks

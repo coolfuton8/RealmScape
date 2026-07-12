@@ -57,6 +57,7 @@ class Toolbar:
             ('reset_campaign',  'Reset Campaign',   False),
             ('lock',            'Lock',             False),
             ('setup_pin',       'Set PIN',          False),
+            ('check_update',    'Check for Updates', False),
         ]),
         ('combat', 'Combat', (130, 45, 45), [
             ('add_enemy',  '+Enemy',     False),
