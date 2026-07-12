@@ -1,0 +1,16 @@
+Thank you so much for trying my software.
+I really hope you enjoy it!
+
+The maps in this demo are from Tom Cartos
+See his work at...
+https://www.tomcartos.com/
+
+Demo audio is by TableTopAudio
+Listen to their work at...
+https://tabletopaudio.com/
+
+Please show these free creators some love!
+User manual -> http://localhost:5000/manual
+Thanks again and happy gaming!
+
+                          — Mike

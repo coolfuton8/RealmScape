@@ -47,7 +47,7 @@ for pkg in libsdl2-2.0-0 libsdl2-mixer-2.0-0 libsdl2-image-2.0-0; do
     dpkg -s "$pkg" &>/dev/null 2>&1 || MISSING_SYS+=("$pkg")
 done
 
-command -v dbus-send &>/dev/null || MISSING_SYS+=("dbus-tools")
+command -v dbus-send &>/dev/null || MISSING_SYS+=("dbus-bin")
 
 if [ ${#MISSING_SYS[@]} -gt 0 ]; then
     echo "  The following system packages are recommended:"
@@ -64,7 +64,15 @@ if [ -f ".venv/bin/python" ]; then
     echo
 else
     echo "Creating virtual environment..."
-    "$PYTHON" -m venv .venv
+    if ! "$PYTHON" -m venv .venv; then
+        PYVER_MM=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
+        echo
+        echo "ERROR: Failed to create the virtual environment."
+        echo "       This usually means the 'venv' module isn't installed."
+        echo "       On Linux Mint / Ubuntu, install it with:"
+        echo "         sudo apt install python${PYVER_MM}-venv"
+        exit 1
+    fi
     echo "Done."
     echo
 fi

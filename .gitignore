@@ -1,6 +1,5 @@
 /.venv
 /cache/
-/campaigns/
 spotify_auth.json
 *.pyc
 __pycache__/

@@ -7,7 +7,9 @@ fuser -k 5000/tcp 2>/dev/null || true
 sleep 0.3
 
 if [ -f ".venv/bin/python" ]; then
-    ".venv/bin/python" main.py
+    exec ".venv/bin/python" main.py
 else
-    python3 main.py
+    echo "ERROR: Virtual environment not found (.venv/bin/python missing)."
+    echo "       Run ./install.sh first to set up dependencies."
+    exit 1
 fi
