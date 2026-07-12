@@ -12,6 +12,10 @@ import threading
 import os
 import secrets as _secrets
 import pin_manager
+try:
+    import posthog_client as _ph
+except Exception:
+    _ph = None
 
 cmd_queue: queue.Queue = queue.Queue()
 
@@ -230,6 +234,8 @@ init();
             return jsonify({'error': 'No PIN set — set one first'}), 400
         if pin_manager.verify_pin(pin):
             session['dm_auth'] = True
+            if _ph:
+                _ph.capture('dm_panel_login')
             return jsonify({'ok': True})
         return jsonify({'error': 'Incorrect PIN'}), 401
 
@@ -244,6 +250,8 @@ init();
             return jsonify({'error': 'PIN must be at least 4 digits'}), 400
         pin_manager.set_pin(pin)
         session['dm_auth'] = True
+        if _ph:
+            _ph.capture('dm_panel_pin_set')
         return jsonify({'ok': True})
 
     @_app.route('/')

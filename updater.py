@@ -7,6 +7,10 @@
 # plus runtime files like active.json/.app_lock/.web_secret, belong to this
 # install and must never be touched.
 import os
+try:
+    import posthog_client as _ph
+except Exception:
+    _ph = None
 import re
 import shutil
 import subprocess
@@ -148,6 +152,8 @@ def download_and_apply_update():
                 pass  # not fatal — user can run install.bat/.sh manually
 
         new_version = get_current_version()
+        if _ph:
+            _ph.capture('update_applied', {'new_version': new_version})
         return True, (
             f'Updated to v{new_version}. Your campaigns were not touched.\n\n'
             f'Restart RealmScape to use the new version.')

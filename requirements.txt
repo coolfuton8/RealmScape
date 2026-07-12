@@ -5,3 +5,5 @@ gevent-websocket==0.10.1
 pygame==2.6.1
 markdown==3.10.2
 dungeongen
+posthog>=3.0.0
+python-dotenv>=1.0.0
