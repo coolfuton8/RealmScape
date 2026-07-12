@@ -1223,7 +1223,6 @@ def _load_init_msg(campaign=None):
 init_msg_popup      = None
 _init_msg_pending   = db.get_hints_enabled()   # show after first map frame
 build_mode_hint     = None                     # one-shot build-mode reminder
-_new_scene_popup_pending = False   # new campaign with no scenes, deferred while locked
 
 aoe_tool         = AoeTool()
 measure_tool     = MeasureTool()
@@ -1471,7 +1470,7 @@ def switch_campaign(name: str):
     global current_scene_idx, start_scene_id, current_zoom, bg_path
     global camera_x, camera_y, layers, fog, initiative_order, current_turn_idx
     global target_entity, init_msg_popup, _init_msg_pending, new_scene_popup
-    global dungeon_gen_dialog, _new_scene_popup_pending
+    global dungeon_gen_dialog
     target_entity = None
     _transient_markers.clear()
     # Discard any leftover new-scene-choice popup (and its Generate-Map
@@ -1481,7 +1480,6 @@ def switch_campaign(name: str):
     # since it's checked before other dialogs in the event loop.
     new_scene_popup    = None
     dungeon_gen_dialog = None
-    _new_scene_popup_pending = False
 
     _save_current_scene_state()
 
@@ -1562,18 +1560,14 @@ def switch_campaign(name: str):
     # the zoom slider). This also reliably identifies a brand-new campaign
     # (an existing one only reaches zero scenes if every scene was deleted).
     if not scenes:
+        # Ask the same Blank Map / Generate Map question the "+" button
+        # asks, instead of silently creating a blank scene. Safe to create
+        # even while locked — the lock overlay always draws on top and
+        # captures all input until unlocked (see the main draw loop).
+        new_scene_popup = NewSceneChoicePopup(font, WIDTH, HEIGHT)
         # New campaigns default to Build Mode on, so hidden items/traps
         # placed while stocking the first scene are visible immediately.
         _set_build_mode(True)
-        if pin_manager.locked:
-            # Don't show the popup on top of the PIN lock overlay — it draws
-            # over the lock screen and blocks the PIN pad. Defer it; a
-            # per-frame check creates it once the campaign is unlocked.
-            _new_scene_popup_pending = True
-        else:
-            # Ask the same Blank Map / Generate Map question the "+" button
-            # asks, instead of silently creating a blank scene.
-            new_scene_popup = NewSceneChoicePopup(font, WIDTH, HEIGHT)
 
 def set_bg_image(path):
     global layers, camera_x, camera_y
@@ -4185,7 +4179,6 @@ while running:
     if _place_trap_dialog: _place_trap_dialog.draw(screen)
     if _edit_item_dialog:  _edit_item_dialog.draw(screen)
     if _edit_trap_dialog:  _edit_trap_dialog.draw(screen)
-    if lock_overlay:       lock_overlay.draw(screen)
     if dc_roll_popup:      dc_roll_popup.draw(screen)
     if dc_result_popup:    dc_result_popup.draw(screen)
     if new_scene_popup:    new_scene_popup.draw(screen)
@@ -4194,21 +4187,14 @@ while running:
         dungeon_gen_dialog.tick()
         dungeon_gen_dialog.draw(screen)
     # Spawn the hint popup on the first rendered frame so the map is visible
-    # behind it — but not while the PIN lock overlay is up, since it draws on
-    # top and would visually block the PIN pad. Stays pending until unlocked.
-    if _init_msg_pending and init_msg_popup is None and not pin_manager.locked:
+    # behind it. Safe to create even while locked — the lock overlay always
+    # draws on top and captures all input until unlocked.
+    if _init_msg_pending and init_msg_popup is None:
         _init_msg_text = _load_init_msg()
         if _init_msg_text:
             init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT, _init_msg_text,
                                        qr_url='https://github.com/coolfuton8/RealmScape')
         _init_msg_pending = False
-
-    # Same deferral for the new-scene choice popup (see switch_campaign()) —
-    # show it once the campaign that needed it is actually unlocked.
-    if _new_scene_popup_pending and new_scene_popup is None and not pin_manager.locked:
-        if not scenes:
-            new_scene_popup = NewSceneChoicePopup(font, WIDTH, HEIGHT)
-        _new_scene_popup_pending = False
 
     if init_msg_popup:         init_msg_popup.draw(screen)
     if build_mode_hint:        build_mode_hint.draw(screen)
@@ -4251,10 +4237,8 @@ while running:
                 title='Up To Date')
 
     # Show the startup "update available" notice once the message slot frees
-    # up (won't interrupt/clobber the campaign's Initial Message popup), and
-    # not while the PIN lock overlay is up (same reason as the Initial
-    # Message deferral above — it would visually block the PIN pad).
-    if _pending_update_notice is not None and init_msg_popup is None and not pin_manager.locked:
+    # up (won't interrupt/clobber the campaign's Initial Message popup).
+    if _pending_update_notice is not None and init_msg_popup is None:
         init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
             f"A new version of RealmScape is available!\n\n"
             f"Installed: v{updater.get_current_version()}\n"
@@ -4282,6 +4266,11 @@ while running:
 
     press_fx.draw(screen)
     draw_hotspot_overlay(screen, font, small_font)
+
+    # Drawn last, unconditionally on top of anything else — while a
+    # campaign is locked nothing else should be visible over the PIN pad,
+    # no matter what other popups happen to exist underneath it.
+    if lock_overlay: lock_overlay.draw(screen)
 
     try:
         pygame.display.flip()
