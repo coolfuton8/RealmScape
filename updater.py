@@ -2,9 +2,10 @@
 # place. Only ever copies items that exist in the downloaded GitHub snapshot,
 # and never deletes anything already on disk — so local-only files (.venv,
 # cache/, secrets, etc., all of which are gitignored and thus never part of
-# the snapshot) are left alone automatically. The one item that IS tracked
-# in GitHub but must still never be touched is `campaigns/`, since every
-# install accumulates its own custom campaign data there.
+# the snapshot) are left alone automatically. Inside `campaigns/`, only the
+# bundled `default` example campaign is synced; every other campaign folder,
+# plus runtime files like active.json/.app_lock/.web_secret, belong to this
+# install and must never be touched.
 import os
 import re
 import shutil
@@ -23,13 +24,6 @@ VERSION_FILE = os.path.join(APP_DIR, 'VERSION')
 
 _VERSION_URL = f'https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{BRANCH}/VERSION'
 _ZIP_URL     = f'https://github.com/{REPO_OWNER}/{REPO_NAME}/archive/refs/heads/{BRANCH}.zip'
-
-# The only top-level name from the downloaded snapshot that must not be
-# applied — everything else in the snapshot came from GitHub and is fair
-# game; everything NOT in the snapshot (.venv, cache/, secrets, etc.) is
-# never touched because the copy loop below only ever acts on what it finds
-# inside the snapshot.
-PRESERVE = {'campaigns'}
 
 
 def get_current_version() -> str:
@@ -61,11 +55,36 @@ def check_for_update(timeout: float = 6.0):
     return None, None
 
 
+def _sync_item(src, dst, backup_dir, label, copied, failed):
+    """Copy src over dst, backing up any existing dst first so a failure
+    partway through can be rolled back instead of losing the old version."""
+    try:
+        if os.path.exists(dst):
+            backup_dst = os.path.join(backup_dir, *label.split('/'))
+            os.makedirs(os.path.dirname(backup_dst), exist_ok=True)
+            shutil.move(dst, backup_dst)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+        copied.append(label)
+    except Exception as exc:
+        failed.append(f'{label}: {exc}')
+        backup_dst = os.path.join(backup_dir, *label.split('/'))
+        if os.path.exists(backup_dst) and not os.path.exists(dst):
+            try:
+                shutil.move(backup_dst, dst)
+            except Exception:
+                pass
+
+
 def download_and_apply_update():
-    """Download the latest main-branch snapshot and copy every file it
-    contains over this install, except `campaigns/`. Local-only files that
-    aren't part of the GitHub repo are left alone since they're never in the
-    snapshot to begin with. Returns (success, message)."""
+    """Download the latest main-branch snapshot and copy it over this
+    install. Inside `campaigns/`, only the bundled `default` example is
+    synced — every other campaign, plus local-only files that aren't part
+    of the GitHub repo (.venv, cache/, secrets, etc.), are left alone.
+    Returns (success, message)."""
     tmp_dir = tempfile.mkdtemp(prefix='realmscape_update_')
     try:
         zip_path = os.path.join(tmp_dir, 'update.zip')
@@ -97,27 +116,21 @@ def download_and_apply_update():
 
         copied, failed = [], []
         for name in os.listdir(src_root):
-            if name in PRESERVE:
-                continue
             src = os.path.join(src_root, name)
+
+            if name == 'campaigns':
+                # Only the bundled "default" example campaign is fair game.
+                # Other campaign folders and runtime files (active.json,
+                # .app_lock, .web_secret) belong to this install.
+                default_src = os.path.join(src, 'default')
+                if os.path.isdir(default_src):
+                    _sync_item(default_src,
+                              os.path.join(APP_DIR, 'campaigns', 'default'),
+                              backup_dir, 'campaigns/default', copied, failed)
+                continue
+
             dst = os.path.join(APP_DIR, name)
-            try:
-                if os.path.exists(dst):
-                    os.makedirs(backup_dir, exist_ok=True)
-                    shutil.move(dst, os.path.join(backup_dir, name))
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
-                copied.append(name)
-            except Exception as exc:
-                failed.append(f'{name}: {exc}')
-                backed_up = os.path.join(backup_dir, name)
-                if os.path.exists(backed_up) and not os.path.exists(dst):
-                    try:
-                        shutil.move(backed_up, dst)
-                    except Exception:
-                        pass
+            _sync_item(src, dst, backup_dir, name, copied, failed)
 
         if failed:
             return False, (
