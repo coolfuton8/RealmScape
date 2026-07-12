@@ -10,6 +10,9 @@ Install deps:  pip install flask flask-socketio
 import queue
 import threading
 import os
+import io
+import shutil
+import tempfile
 import secrets as _secrets
 import pin_manager
 
@@ -661,6 +664,59 @@ async function manualCode() {{
             ok = cm.delete(name)
             cmd_queue.put({'type': 'delete_campaign', 'name': name})
             return jsonify({'ok': ok})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @_app.route('/api/campaigns/<name>/export', methods=['GET'])
+    def _api_campaigns_export(name):
+        try:
+            import campaigns as cm
+            if name == 'default':
+                return jsonify({'error': 'Cannot export the default campaign'}), 400
+            if name not in cm.list_campaigns():
+                return jsonify({'error': 'Campaign not found'}), 404
+            data = cm.export_zip(name)
+            return send_file(io.BytesIO(data), as_attachment=True,
+                             download_name=f'{name}.zip', mimetype='application/zip')
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @_app.route('/api/campaigns/import', methods=['POST'])
+    def _api_campaigns_import():
+        try:
+            import campaigns as cm
+            name      = (request.form.get('name') or '').strip()
+            overwrite = request.form.get('overwrite') == 'true'
+            f = request.files.get('file')
+            if not f or f.filename == '':
+                return jsonify({'error': 'No file uploaded'}), 400
+            if not name or not cm.is_valid_name(name):
+                return jsonify({'error': f'Invalid campaign name "{name}". Avoid: \\ / : * ? " < > |'}), 400
+            if name == 'default':
+                return jsonify({'error': 'Cannot import as the default campaign'}), 400
+
+            exists = name in cm.list_campaigns()
+            if exists and not overwrite:
+                return jsonify({'error': 'A campaign with that name already exists'}), 409
+
+            tmp_dir  = tempfile.mkdtemp(prefix='realmscape_import_')
+            zip_path = os.path.join(tmp_dir, 'upload.zip')
+            f.save(zip_path)
+            try:
+                cm.validate_campaign_zip(zip_path)
+            except ValueError as e:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                return jsonify({'error': str(e)}), 400
+
+            if exists:
+                # Might be the active campaign (or become it before this is
+                # processed) — let the pygame main thread make the call, since
+                # it alone controls the DB connection and in-memory state.
+                cmd_queue.put({'type': 'import_campaign', 'name': name, 'zip_path': zip_path})
+            else:
+                cm.import_zip(name, zip_path)
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            return jsonify({'ok': True, 'name': name})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 

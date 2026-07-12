@@ -514,6 +514,11 @@ body {
       <button onclick="createCampaign(false)" style="background:#166534;border:none;color:#fff;border-radius:5px;padding:6px 12px;cursor:pointer;white-space:nowrap;">Create</button>
       <button onclick="createCampaign(true)"  style="background:#1e3a5f;border:none;color:#fff;border-radius:5px;padding:6px 12px;cursor:pointer;white-space:nowrap;">Create &amp; Switch</button>
     </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <button onclick="document.getElementById('campaign-import-file').click()"
+        style="flex:1;background:#0e7490;border:none;color:#fff;border-radius:5px;padding:6px 12px;cursor:pointer;white-space:nowrap;">📥 Load Campaign…</button>
+      <input id="campaign-import-file" type="file" accept=".zip,application/zip" style="display:none;">
+    </div>
     <div id="campaign-modal-err" style="color:#f87171;font-size:12px;min-height:16px;"></div>
   </div>
 </div>
@@ -2037,6 +2042,16 @@ function renderCampaignList() {
     renBtn.onclick = () => startInlineRename(row, name, label, renBtn);
     row.appendChild(renBtn);
 
+    // 💾 Save (export) — available for the active campaign too
+    if (name !== 'default') {
+      const save = document.createElement('button');
+      save.textContent = '💾 Save';
+      save.title = 'Download a backup of this campaign';
+      save.style.cssText = 'background:#0e7490;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0;';
+      save.onclick = () => exportCampaign(name);
+      row.appendChild(save);
+    }
+
     if (!isActive) {
       const sw = document.createElement('button');
       sw.textContent = 'Switch';
@@ -2144,9 +2159,47 @@ async function deleteCampaign(name) {
   } catch(e) { err.textContent = 'Network error.'; }
 }
 
+function exportCampaign(name) {
+  window.location.href = '/api/campaigns/' + encodeURIComponent(name) + '/export';
+}
+
+async function handleCampaignImportFile(event) {
+  const file = event.target.files[0];
+  event.target.value = '';   // reset so picking the same file again still fires this
+  if (!file) return;
+
+  const err = document.getElementById('campaign-modal-err');
+  err.textContent = '';
+
+  const defaultName = file.name.replace(/\.zip$/i, '');
+  const input = prompt('Import as campaign name:', defaultName);
+  if (input === null) return;
+  const name = input.trim();
+  if (!name) return;
+  if (name === 'default') { err.textContent = 'Cannot import as the default campaign.'; return; }
+
+  const exists = !!(G && G.campaign && G.campaign.all.includes(name));
+  if (exists && !confirm(`A campaign named "${name}" already exists. Overwrite it? This cannot be undone.`)) {
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('name', name);
+  fd.append('overwrite', exists ? 'true' : 'false');
+
+  try {
+    const r = await fetch('/api/campaigns/import', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) { err.textContent = data.error || 'Error importing campaign.'; return; }
+    renderCampaignList();
+  } catch(e) { err.textContent = 'Network error.'; }
+}
+
 // ── Button wiring ─────────────────────────────────────────────────────────────
 document.getElementById('fog-btn').onclick   = () => send('toggle_fog');
 document.getElementById('party-btn').onclick = () => togglePartyMove();
+document.getElementById('campaign-import-file').onchange = handleCampaignImportFile;
 document.getElementById('roll-btn').onclick = () => {
   send('roll_initiative');
   const b = document.getElementById('roll-btn');

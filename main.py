@@ -9,7 +9,7 @@ if _sys.platform != 'win32':
     os.environ['SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR'] = '1'
 
 import pygame
-import random, math, queue, subprocess, re as _re, threading, hashlib, webbrowser, socket
+import random, math, queue, subprocess, re as _re, threading, hashlib, webbrowser, socket, shutil
 
 def _detect_local_ip() -> str:
     try:
@@ -1118,6 +1118,26 @@ def _handle_dm_command(cmd):
                     db.set_db_path(campaigns_mod.db_path(new))  # release old handle first
                     pygame.display.set_caption(f"RealmScape — {new}  |  GM Panel: {_GM_URL}")
                 campaigns_mod.remove_dir(old)  # now safe — no open handles to old folder
+
+    elif t == 'import_campaign':
+        name     = cmd.get('name', '')
+        zip_path = cmd.get('zip_path', '')
+        try:
+            if name and name == active_campaign:
+                # Overwriting the campaign currently in use — detach from it
+                # first (flushes + releases the DB handle), replace its
+                # folder on disk, then switch back into the fresh import.
+                switch_campaign('default')
+                campaigns_mod.import_zip(name, zip_path)
+                switch_campaign(name)
+                return   # switch_campaign already broadcasts
+            elif name:
+                campaigns_mod.import_zip(name, zip_path)
+        except Exception as exc:
+            print(f'[Campaign import error] {exc}')
+        finally:
+            if zip_path:
+                shutil.rmtree(os.path.dirname(zip_path), ignore_errors=True)
 
 
 
@@ -4048,7 +4068,8 @@ while running:
     if _init_msg_pending and init_msg_popup is None:
         _init_msg_text = _load_init_msg()
         if _init_msg_text:
-            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT, _init_msg_text)
+            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT, _init_msg_text,
+                                       qr_url='https://github.com/coolfuton8/RealmScape')
         _init_msg_pending = False
 
     if init_msg_popup:         init_msg_popup.draw(screen)

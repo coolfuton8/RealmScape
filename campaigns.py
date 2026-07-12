@@ -3,6 +3,9 @@ import os
 import json
 import shutil
 import re
+import io
+import sqlite3
+import zipfile
 
 _BASE         = os.path.dirname(os.path.abspath(__file__))
 CAMPAIGNS_DIR = os.path.join(_BASE, 'campaigns')
@@ -202,6 +205,86 @@ def import_asset(src_path: str, campaign_name: str) -> str:
 
     shutil.copy2(abs_src, dest)
     return make_relative_path(dest)
+
+
+def export_zip(name: str) -> bytes:
+    """Zip up a campaign folder (checkpointing its DB first for a consistent
+    snapshot) and return the archive's raw bytes. Raises FileNotFoundError
+    if the campaign doesn't exist."""
+    path = campaign_path(name)
+    if not os.path.isdir(path):
+        raise FileNotFoundError(f'Campaign "{name}" not found')
+    db_file = db_path(name)
+    if os.path.isfile(db_file):
+        conn = None
+        try:
+            conn = sqlite3.connect(db_file)
+            conn.execute('PRAGMA wal_checkpoint(FULL)')
+        except Exception:
+            pass   # best-effort — export proceeds even if checkpoint fails
+        finally:
+            # Must always close, even on failure — an unclosed connection
+            # holds an OS-level lock on db_file on Windows, which would later
+            # block deleting/replacing this campaign's folder on import.
+            if conn is not None:
+                conn.close()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, _, files in os.walk(path):
+            for fn in files:
+                full = os.path.join(root, fn)
+                zf.write(full, os.path.relpath(full, path))
+    return buf.getvalue()
+
+
+def validate_campaign_zip(zip_path: str):
+    """Raise ValueError if zip_path doesn't look like a campaign export
+    produced by export_zip()."""
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            bad = zf.testzip()
+            if bad is not None:
+                raise ValueError(f'Corrupt file in archive: {bad}')
+            if 'campaign.db' not in zf.namelist():
+                raise ValueError('This file does not look like a RealmScape campaign export')
+    except zipfile.BadZipFile:
+        raise ValueError('Not a valid zip file')
+
+
+def _rmtree_retry(path: str, attempts: int = 6, delay: float = 0.3):
+    """Synchronous delete with retries — Windows (Defender, Search indexer)
+    can briefly lock files that were just written/extracted."""
+    import time
+    for _ in range(attempts):
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError:
+            time.sleep(delay)
+    shutil.rmtree(path, ignore_errors=True)   # give up gracefully
+
+
+def import_zip(name: str, zip_path: str):
+    """Extract a campaign zip into campaigns/<name>/, replacing any existing
+    folder of that name. Raises ValueError on an invalid name or a zip that
+    doesn't look like a RealmScape campaign export. Refuses 'default'."""
+    if name == 'default' or not is_valid_name(name):
+        raise ValueError('Invalid or reserved campaign name')
+    validate_campaign_zip(zip_path)
+
+    _ensure()
+    staging = campaign_path(f'.importing_{name}')
+    if os.path.isdir(staging):
+        _rmtree_retry(staging)
+    os.makedirs(staging)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(staging)
+
+    target = campaign_path(name)
+    if os.path.isdir(target):
+        _rmtree_retry(target)
+    shutil.move(staging, target)
+    os.makedirs(assets_path(name), exist_ok=True)   # in case the export had none
 
 
 def migrate_legacy_db():

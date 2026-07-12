@@ -4,6 +4,27 @@ import subprocess as _subprocess
 from constants import *
 
 
+def _build_qr_surface(data: str, px: int = 4):
+    """Render a QR code encoding `data` as a small white pygame Surface with
+    black modules — no PIL/image-library dependency required."""
+    try:
+        import qrcode
+        qr = qrcode.QRCode(border=2, error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data(data)
+        qr.make(fit=True)
+        matrix = qr.get_matrix()
+    except Exception:
+        return None
+    n = len(matrix)
+    surf = pygame.Surface((n * px, n * px))
+    surf.fill(WHITE)
+    for r, row in enumerate(matrix):
+        for c, dark in enumerate(row):
+            if dark:
+                surf.fill(BLACK, (c * px, r * px, px, px))
+    return surf
+
+
 def _read_clipboard() -> str:
     """Return clipboard text, trying multiple methods for Linux compatibility."""
     # tkinter is the most reliable cross-platform approach
@@ -1866,15 +1887,17 @@ class HintPopup:
     """Startup hint card with scrolling, newline support, and clickable URLs.
     handle_event() returns True when dismissed."""
 
-    W   = 540
+    _BASE_W = 540
     PAD = 16
     _TITLE_H  = 40   # pixels reserved above content
     _FOOTER_H = 54   # pixels reserved below content (button + tip)
     _MARGIN   = 30   # min gap between dialog edge and screen edge
     _ACCENT  = (230, 200, 80)
     _URL_COL = (100, 190, 255)
+    _QR_W    = 170   # sidebar width reserved when qr_url is given
 
-    def __init__(self, font, small_font, screen_w, screen_h, hint_text, title='Initial Message'):
+    def __init__(self, font, small_font, screen_w, screen_h, hint_text,
+                title='Initial Message', qr_url=None):
         import re
         self.font        = font
         self.small_font  = small_font
@@ -1885,28 +1908,43 @@ class HintPopup:
         self._url_rects  = []
         self._scroll     = 0
 
+        # QR code sidebar (optional) — degrades gracefully to a normal
+        # popup if the qrcode library isn't installed or generation fails.
+        self._qr_surface   = _build_qr_surface(qr_url) if qr_url else None
+        self._qr_url       = qr_url
+        self._qr_caption   = ('Get updates', 'on GitHub') if self._qr_surface else None
+        self._qr_click_rect = None   # set during draw() once card position is known
+        qr_w = self._QR_W if self._qr_surface else 0
+
         # Build lines before we know H so we can size to fit
         self._lines = self._build_lines(hint_text)
 
         # Ideal height: fit all lines; cap so dialog stays within screen
         max_h    = screen_h - self._MARGIN * 2
         ideal_h  = self._TITLE_H + len(self._lines) * self._lh + self._FOOTER_H
-        H        = max(self._TITLE_H + self._lh + self._FOOTER_H,
-                       min(ideal_h, max_h))
+        min_h    = self._TITLE_H + self._lh + self._FOOTER_H
+        if self._qr_surface:
+            card_h  = self._qr_surface.get_height() + 16   # 8px card padding * 2
+            cap_h   = len(self._qr_caption) * small_font.get_linesize() + 10
+            min_h   = max(min_h, self._TITLE_H + card_h + cap_h + 40 + self._FOOTER_H)
+        H        = max(min_h, min(ideal_h, max_h))
 
+        self.W   = self._BASE_W + qr_w
         self.x = (screen_w - self.W) // 2
         self.y = (screen_h - H) // 2
 
         self._content_y = self.y + self._TITLE_H
         self._content_h = H - self._TITLE_H - self._FOOTER_H
+        self._qr_rect   = pygame.Rect(self.x + self._BASE_W, self._content_y,
+                                      qr_w, self._content_h)
         self._vis_lines = max(1, self._content_h // self._lh)
 
         self._rect      = pygame.Rect(self.x, self.y, self.W, H)
         self._ok_rect   = pygame.Rect(self.x + self.W - self.PAD - 100,
                                       self.y + H - self.PAD - 34, 100, 34)
-        self._up_rect   = pygame.Rect(self.x + self.W - self.PAD - 26,
+        self._up_rect   = pygame.Rect(self.x + self._BASE_W - self.PAD - 26,
                                       self.y + self._TITLE_H, 26, 26)
-        self._down_rect = pygame.Rect(self.x + self.W - self.PAD - 26,
+        self._down_rect = pygame.Rect(self.x + self._BASE_W - self.PAD - 26,
                                       self.y + H - self._FOOTER_H - 26, 26, 26)
 
     # ── Text parsing ─────────────────────────────────────────────────────────
@@ -1945,7 +1983,7 @@ class HintPopup:
         return lines
 
     def _build_lines(self, text):
-        max_w = self.W - self.PAD * 2 - 30          # leave room for scroll arrows
+        max_w = self._BASE_W - self.PAD * 2 - 30    # leave room for scroll arrows
         all_lines = []
         for para in text.split('\n'):
             if not para.strip():
@@ -1967,7 +2005,7 @@ class HintPopup:
 
         # Clip content area
         clip = pygame.Rect(self.x + self.PAD, self._content_y,
-                           self.W - self.PAD * 2 - 30, self._content_h)
+                           self._BASE_W - self.PAD * 2 - 30, self._content_h)
         old_clip = surface.get_clip()
         surface.set_clip(clip)
 
@@ -2007,6 +2045,32 @@ class HintPopup:
                 surface.blit(t, (rect.centerx - t.get_width() // 2,
                                  rect.centery - t.get_height() // 2))
 
+        # QR sidebar (optional)
+        if self._qr_surface:
+            pygame.draw.line(surface, PANEL_BORDER,
+                             (self._qr_rect.x, self._content_y),
+                             (self._qr_rect.x, self._content_y + self._content_h))
+            card_pad = 8
+            card_w   = self._qr_surface.get_width()  + card_pad * 2
+            card_h   = self._qr_surface.get_height() + card_pad * 2
+            cap_h    = len(self._qr_caption) * self.small_font.get_linesize() + 10
+            block_h  = card_h + cap_h
+            cx = self._qr_rect.centerx
+            cy = self._qr_rect.y + max(0, (self._qr_rect.h - block_h) // 2)
+
+            card_rect = pygame.Rect(0, 0, card_w, card_h)
+            card_rect.centerx = cx
+            card_rect.y = cy
+            pygame.draw.rect(surface, WHITE, card_rect, border_radius=8)
+            surface.blit(self._qr_surface, (card_rect.x + card_pad, card_rect.y + card_pad))
+            self._qr_click_rect = card_rect
+
+            ty = card_rect.bottom + 10
+            for line in self._qr_caption:
+                t = self.small_font.render(line, True, LIGHT_GRAY)
+                surface.blit(t, (cx - t.get_width() // 2, ty))
+                ty += self.small_font.get_linesize()
+
         # Footer
         pygame.draw.rect(surface, TOOLBAR_BTN_ACTIVE, self._ok_rect, border_radius=6)
         t = self.font.render('Got it', True, WHITE)
@@ -2045,6 +2109,11 @@ class HintPopup:
                     import webbrowser
                     webbrowser.open(url)
                     return False
+            # QR card click (mouse users without a phone handy)
+            if self._qr_click_rect and self._qr_click_rect.collidepoint(pos):
+                import webbrowser
+                webbrowser.open(self._qr_url)
+                return False
             # Scroll arrows
             if self._up_rect.collidepoint(pos):
                 self._scroll -= 1; self._clamp_scroll(); return False
