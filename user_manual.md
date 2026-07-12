@@ -8,6 +8,7 @@
 
 - [Welcome](#welcome)
 - [The Two Screens](#the-two-screens)
+- [Screen, Camera & Map Navigation](#screen-camera--map-navigation)
 - [Part 1 — The Toolbar at a Glance](#part-1--the-toolbar-at-a-glance)
   - [Replaying an Adventure with a New Group](#replaying-an-adventure-with-a-new-group)
 - [Part 2 — Starting a New Campaign](#part-2--starting-a-new-campaign)
@@ -75,6 +76,35 @@ The GM Panel is divided into several sections:
 
 > **No network available?** See [Part 4 — Private Hotspot Mode](#part-4--private-hotspot-mode)
 > to create a dedicated private Wi-Fi network just for the GM browser.
+
+---
+
+## Screen, Camera & Map Navigation
+
+The map window shows one large scrollable world — the camera is simply the rectangle of that
+world currently visible on screen. Panning slides that rectangle around; zooming changes how much
+of the world fits inside it. Every scene remembers its own camera position and zoom level, so
+switching back to a scene later returns you to exactly where you left off.
+
+### Panning
+
+| Input | How |
+|-------|-----|
+| Keyboard | Arrow keys pan the camera. Hold **Shift** + arrow keys to move all player characters instead of the camera. |
+| Mouse | Left-click and drag on empty map space (not on a token). |
+| Touch | Two-finger drag anywhere on the map. A one-finger drag on empty space doesn't pan — it's reserved for tapping. |
+
+### Zooming
+
+Zoom is controlled by the **zoom slider** under the **Map** toolbar dropdown — drag it left to
+zoom out, right to zoom in. There is currently no keyboard shortcut, scroll-wheel zoom, or
+touch pinch-to-zoom gesture; the slider is the only way to change zoom level.
+
+### Resetting the Camera
+
+**Map → Party Home** instantly moves all player tokens to the top-left corner of the map and
+recenters the camera there — handy after a scene reset or if you've panned somewhere and want to
+get back to the party quickly.
 
 ---
 

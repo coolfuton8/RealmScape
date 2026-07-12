@@ -83,6 +83,17 @@ if _sys.platform != 'win32':
 pygame.init()
 WIDTH, HEIGHT = window_state['width'], window_state['height']
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+try:
+    # Maximize on every launch, then immediately adopt the resulting size so
+    # layout code below (layers, toolbar, etc.) never runs against the stale
+    # pre-maximize dimensions while waiting for a resize event to catch up.
+    from pygame._sdl2.video import Window as _StartupWindow
+    _startup_win = _StartupWindow.from_display_module()
+    _startup_win.maximize()
+    WIDTH, HEIGHT = _startup_win.size
+    window_state['width'], window_state['height'] = WIDTH, HEIGHT
+except Exception:
+    pass   # not fatal — window just opens at its last saved size if this fails
 pygame.display.set_caption(f"RealmScape — {active_campaign}  |  GM Panel: {_GM_URL}")
 _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'icon.png')
 if os.path.exists(_icon_path):
