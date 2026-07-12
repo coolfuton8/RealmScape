@@ -1999,14 +1999,17 @@ def _apply_confirm(pending):
 
 # ── Self-update (check GitHub, download, and apply in place) ─────────────────
 
-_update_check_queue      = queue.Queue()   # thread → main: (latest, error)
+_update_check_queue      = queue.Queue()   # thread → main: (latest, error, startup)
 _update_apply_queue      = queue.Queue()   # thread → main: (success, message)
 _update_check_in_progress = False
 _update_apply_in_progress = False
+_pending_update_notice    = None   # startup "update available" notice, shown once
+                                    # init_msg_popup is free (won't clobber the
+                                    # campaign's Initial Message popup)
 
-def _bg_check_for_update():
+def _bg_check_for_update(startup=False):
     latest, err = updater.check_for_update()
-    _update_check_queue.put({'latest': latest, 'error': err})
+    _update_check_queue.put({'latest': latest, 'error': err, 'startup': startup})
 
 def _bg_apply_update():
     success, message = updater.download_and_apply_update()
@@ -2646,6 +2649,12 @@ _last_caption_url = _effective_gm_url()
 threading.Thread(target=telemetry.send_launch_event,
                  args=(updater.get_current_version(),),
                  daemon=True, name='telemetry-launch').start()
+
+# Silent startup check — only surfaces a popup if an update is actually
+# available; stays quiet if already up to date or the check fails.
+_update_check_in_progress = True
+threading.Thread(target=_bg_check_for_update, kwargs={'startup': True},
+                 daemon=True, name='update-check-startup').start()
 
 while running:
     now = pygame.time.get_ticks()
@@ -4081,11 +4090,14 @@ while running:
         else:
             dungeon_gen_dialog.set_error(gen_result['error'])
 
-    # Self-update — surface the result of a manual "Check for Updates" click
+    # Self-update — surface the result of a "Check for Updates" click, or a
+    # silent startup check (which only ever speaks up if one is available).
     if not _update_check_queue.empty():
         _upd = _update_check_queue.get_nowait()
         _update_check_in_progress = False
-        if _upd['latest']:
+        if _upd['latest'] and _upd['startup']:
+            _pending_update_notice = _upd   # shown below once init_msg_popup is free
+        elif _upd['latest']:
             confirm_popup = ConfirmPopup(
                 f"A new version of RealmScape is available!\n\n"
                 f"Installed: v{updater.get_current_version()}\n"
@@ -4094,6 +4106,8 @@ while running:
                 f"Your campaigns will not be affected.",
                 font, WIDTH, HEIGHT)
             confirm_popup._pending = 'app_update'
+        elif _upd['startup']:
+            pass   # up-to-date / check failed — stay quiet on a silent startup check
         elif _upd['error']:
             init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
                 f"Could not check for updates:\n\n{_upd['error']}",
@@ -4103,6 +4117,17 @@ while running:
                 f"You're running the latest version "
                 f"(v{updater.get_current_version()}).",
                 title='Up To Date')
+
+    # Show the startup "update available" notice once the message slot frees
+    # up (won't interrupt/clobber the campaign's Initial Message popup).
+    if _pending_update_notice is not None and init_msg_popup is None:
+        init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
+            f"A new version of RealmScape is available!\n\n"
+            f"Installed: v{updater.get_current_version()}\n"
+            f"Available: v{_pending_update_notice['latest']}\n\n"
+            f"To install it, open Campaign -> Check for Updates.",
+            title='Update Available')
+        _pending_update_notice = None
 
     # Self-update — surface the result of an in-progress download/install
     if not _update_apply_queue.empty():
