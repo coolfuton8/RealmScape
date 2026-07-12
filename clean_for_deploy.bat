@@ -20,6 +20,8 @@ echo     campaigns\active.json
 echo     characters.db
 echo     .install_id  (anonymous telemetry id)
 echo     DEMO_MODE  (demo/kiosk mode toggle)
+echo     campaigns\default\.pin  (PIN hash, if set)
+echo     campaigns\default\.last_loaded  (demo-mode purge timestamp)
 echo     All campaign folders except "default"
 echo.
 echo   [Cache and generated files]
@@ -49,6 +51,8 @@ call :remove_file "campaigns\active.json"
 call :remove_file "characters.db"
 call :remove_file ".install_id"
 call :remove_file "DEMO_MODE"
+call :remove_file "campaigns\default\.pin"
+call :remove_file "campaigns\default\.last_loaded"
 
 :: ── Non-default campaign folders ─────────────────────────────
 for /d %%C in ("campaigns\*") do (

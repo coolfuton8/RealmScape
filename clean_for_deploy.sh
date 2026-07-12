@@ -20,6 +20,8 @@ echo "    campaigns/active.json"
 echo "    characters.db"
 echo "    .install_id  (anonymous telemetry id)"
 echo "    DEMO_MODE  (demo/kiosk mode toggle)"
+echo "    campaigns/default/.pin  (PIN hash, if set)"
+echo "    campaigns/default/.last_loaded  (demo-mode purge timestamp)"
 echo "    All campaign folders except \"default\""
 echo
 echo "  [Cache and generated files]"
@@ -65,6 +67,8 @@ remove_file "campaigns/active.json"
 remove_file "characters.db"
 remove_file ".install_id"
 remove_file "DEMO_MODE"
+remove_file "campaigns/default/.pin"
+remove_file "campaigns/default/.last_loaded"
 
 # ── Non-default campaign folders ─────────────────────────────
 for dir in campaigns/*/; do

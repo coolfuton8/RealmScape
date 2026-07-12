@@ -135,8 +135,11 @@ def load_bg(path, w, h, zoom=1.0):
                 img = pygame.transform.smoothscale(img, (nw, nh))
             big = pygame.Surface((max(w, img.get_width()), max(h, img.get_height())))
             big.fill(BLACK)
-            big.blit(img, ((big.get_width()-img.get_width())//2,
-                           (big.get_height()-img.get_height())//2))
+            # Left/top-justified, not centered — token world coordinates are
+            # relative to the image's own (0,0), so centering it inside a
+            # larger canvas (e.g. a maximized window bigger than the image)
+            # would shift the map out from under every token's stored position.
+            big.blit(img, (0, 0))
             return big
         except pygame.error:
             pass

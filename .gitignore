@@ -3,6 +3,8 @@
 spotify_auth.json
 .install_id
 DEMO_MODE
+.pin
+.last_loaded
 *.pyc
 __pycache__/
 *.db-shm
