@@ -13,7 +13,6 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from datetime import datetime
 
 REPO_OWNER = 'coolfuton8'
 REPO_NAME  = 'RealmScape'
@@ -109,10 +108,11 @@ def download_and_apply_update():
             return False, 'Downloaded update was empty.'
         src_root = os.path.join(extract_dir, entries[0])
 
-        # Back up whatever is about to be replaced, so a partial failure
-        # can be rolled back instead of leaving a half-updated install.
-        backup_dir = os.path.join(
-            APP_DIR, f'_update_backup_{datetime.now():%Y%m%d_%H%M%S}')
+        # Back up whatever is about to be replaced, so a partial failure can
+        # be rolled back instead of leaving a half-updated install. Lives
+        # inside tmp_dir (not APP_DIR) so it's removed automatically by the
+        # cleanup below instead of accumulating in the RealmScape folder.
+        backup_dir = os.path.join(tmp_dir, 'backup')
 
         copied, failed = [], []
         for name in os.listdir(src_root):
