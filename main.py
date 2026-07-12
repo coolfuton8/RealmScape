@@ -1552,6 +1552,7 @@ def set_bg_image(path):
         db.update_scene_image(scene_id(), rel)
         s = scenes[current_scene_idx]
         scenes[current_scene_idx] = (s[0], s[1], rel, s[3], s[4])
+        dm_server.set_bg_path(rel)
 
 # ── Targeting reticle ─────────────────────────────────────────────────────────
 
