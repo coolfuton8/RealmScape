@@ -2680,6 +2680,11 @@ while running:
 
         # ── PIN lock overlay intercepts everything except QUIT ──────────────
         elif lock_overlay:
+            if event.type == pygame.FINGERUP:
+                # LockOverlay only understands MOUSEBUTTONDOWN/KEYDOWN — translate
+                # the tap so the numpad responds to touch, not just mouse clicks.
+                event = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
+                    {'button': 1, 'pos': (int(event.x * WIDTH), int(event.y * HEIGHT))})
             pin = lock_overlay.handle_event(event)
             if pin is not None:
                 if pin_manager.verify_pin(pin):
@@ -2690,6 +2695,9 @@ while running:
 
         # ── PIN setup dialog intercepts everything except QUIT ──────────────
         elif pin_setup_dialog:
+            if event.type == pygame.FINGERUP:
+                event = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
+                    {'button': 1, 'pos': (int(event.x * WIDTH), int(event.y * HEIGHT))})
             result = pin_setup_dialog.handle_event(event)
             if result == 'cancel':
                 pin_setup_dialog = None
@@ -2792,106 +2800,24 @@ while running:
                     sr = toolbar._sc_r.get('name')
                     if not (sr and sr.collidepoint(fake_pos)):
                         renaming_scene = False
-                if zone_dialog:
-                    synth = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
-                                               {'button': 1, 'pos': fake_pos})
-                    res = zone_dialog.handle_event(synth)
-                    _apply_zone_dialog(res)
-                    continue
-                if campaign_dialog:
-                    synth = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
-                                               {'button': 1, 'pos': fake_pos})
-                    action = campaign_dialog.handle_event(synth)
-                    _apply_campaign_dialog(action)
-                    continue
-                if char_dialog:
-                    synth = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
-                                               {'button': 1, 'pos': fake_pos})
-                    result = char_dialog.handle_event(synth)
-                    if result == 'cancel':
-                        char_dialog = None
-                    elif result is not None:
-                        apply_char_dialog(result)
-                    continue
-                if enemy_dialog:
-                    synth = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
-                                               {'button': 1, 'pos': fake_pos})
-                    result = enemy_dialog.handle_event(synth)
-                    if result == 'cancel':
-                        enemy_dialog = None
-                    elif result is not None:
-                        apply_enemy_dialog(result)
-                    continue
-                if size_popup:
-                    kind, val = size_popup.hit(fake_pos)
-                    if kind == 'close':
-                        size_popup = None
-                    elif kind == 'size':
-                        ent = size_popup.entity
-                        ent.size = val
-                        if ent.is_enemy: db.update_enemy_size(ent.id, val)
-                        else:            db.update_character_size(ent.id, val)
-                        size_popup = None
-                    continue
-                if stat_block_panel:
-                    kind, val = stat_block_panel.hit(fake_pos)
-                    if kind == 'close':
-                        stat_block_panel = None
-                        continue
-                    elif kind in ('inc', 'dec'):
-                        stat_block_panel.adjust(val, 1 if kind == 'inc' else -1)
-                        etype = 'enemy' if stat_block_panel.entity.is_enemy else 'char'
-                        db.save_stat_block(etype, stat_block_panel.entity.id,
-                                           stat_block_panel.data)
-                        continue
-                    # outside panel: fall through
-                if notes_panel.visible:
-                    action = notes_panel.hit(fake_pos)
-                    if action == 'close':
-                        notes_panel.visible = False
-                        toolbar.active['notes'] = False
-                        db.save_notes(scene_id(), notes_panel.text)
-                        continue
-                    elif action == 'focus':
-                        notes_panel.focused = True
-                        continue
-                    else:
-                        notes_panel.focused = False
-                if scene_picker:
-                    action, val = scene_picker.hit(fake_pos)
-                    if action == 'select':
-                        _place_marker(val)
-                    scene_picker = None
-                    continue
-                if num_input_popup:
-                    kind, val = num_input_popup.hit(fake_pos)
-                    if kind in ('confirm', 'cancel'):
-                        apply_num_input(kind, val or 0)
-                    continue
-                if hp_popup:
-                    kind, val = hp_popup.hit(fake_pos)
-                    _apply_hp_popup(kind, val)
-                    continue
-
-                if conditions_popup:
-                    kind, val = conditions_popup.hit(fake_pos)
-                    if kind == 'close':
-                        conditions_popup = None
-                    elif kind == 'toggle':
-                        ent = conditions_popup.entity
-                        if val in ent.conditions: ent.conditions.discard(val)
-                        else:                     ent.conditions.add(val)
-                        cs = ent.conditions_str()
-                        if ent.is_enemy: db.update_enemy_conditions(ent.id, cs)
-                        else:            db.update_character_conditions(ent.id, cs)
-                    continue
-
-                if context_menu:
-                    action = context_menu.hit(fake_pos)
-                    if action:
-                        handle_context(action)
-                    elif context_menu.is_outside(fake_pos):
-                        context_menu = None
+                # Any modal dialog/popup currently open? Re-dispatch the tap as a
+                # real MOUSEBUTTONDOWN + MOUSEBUTTONUP pair so it runs through the
+                # exact same handling as a desktop mouse click, instead of keeping a
+                # second, hand-maintained copy of this logic in sync per-dialog (the
+                # previous approach, which is how several dialogs ended up unreachable
+                # by touch — they were simply never added to that list).
+                if any([
+                    _place_item_dialog, _place_trap_dialog, _edit_item_dialog, _edit_trap_dialog,
+                    init_msg_popup, build_mode_hint, dc_roll_popup, dc_result_popup, tta_browser,
+                    zone_dialog, campaign_dialog, char_dialog, enemy_dialog, size_popup,
+                    stat_block_panel, notes_panel.visible, new_scene_popup, dungeon_gen_dialog,
+                    scene_picker, confirm_popup, group_hp_popup, num_input_popup, hp_popup,
+                    conditions_popup, context_menu,
+                ]):
+                    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN,
+                                                         {'button': 1, 'pos': fake_pos}))
+                    pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP,
+                                                         {'button': 1, 'pos': fake_pos}))
                     continue
 
                 toolbar.maybe_close_dropdown(fake_pos)
