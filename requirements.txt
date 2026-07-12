@@ -4,4 +4,5 @@ gevent==26.5.0
 gevent-websocket==0.10.1
 pygame==2.6.1
 markdown==3.10.2
+posthog==7.18.0
 dungeongen

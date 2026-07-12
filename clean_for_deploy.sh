@@ -18,6 +18,7 @@ echo
 echo "  [Personal / runtime state]"
 echo "    campaigns/active.json"
 echo "    characters.db"
+echo "    .install_id  (anonymous telemetry id)"
 echo "    All campaign folders except \"default\""
 echo
 echo "  [Cache and generated files]"
@@ -61,6 +62,7 @@ remove_file "spotify_auth.json"
 # ── Runtime state ────────────────────────────────────────────
 remove_file "campaigns/active.json"
 remove_file "characters.db"
+remove_file ".install_id"
 
 # ── Non-default campaign folders ─────────────────────────────
 for dir in campaigns/*/; do

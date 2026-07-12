@@ -39,6 +39,7 @@ from feedback  import sound_fx, press_fx
 import campaigns as campaigns_mod
 import server as dm_server
 import updater
+import telemetry
 
 # ── Campaign init (must happen before db.init_db) ────────────────────────────
 campaigns_mod.migrate_legacy_db()
@@ -2624,6 +2625,10 @@ def _any_modal_open():
 running = True
 clock   = pygame.time.Clock()
 _last_caption_url = _effective_gm_url()
+
+threading.Thread(target=telemetry.send_launch_event,
+                 args=(updater.get_current_version(),),
+                 daemon=True, name='telemetry-launch').start()
 
 while running:
     now = pygame.time.get_ticks()

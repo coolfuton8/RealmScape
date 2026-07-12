@@ -165,6 +165,12 @@ sudo ./run_hotspot.sh
 
 ---
 
+## Privacy
+
+Each time RealmScape starts, it sends a small anonymous "app launched" event (a random per-install id, the app version, and your OS) so the developer can see aggregate usage across installs. No campaign data, names, or other personal content is ever sent. To disable this entirely, set the environment variable `REALMSCAPE_TELEMETRY=0` before launching.
+
+---
+
 ## Troubleshooting
 
 **"Python was not found" or the installer closes immediately**

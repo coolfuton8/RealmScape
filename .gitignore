@@ -1,6 +1,7 @@
 /.venv
 /cache/
 spotify_auth.json
+.install_id
 *.pyc
 __pycache__/
 *.db-shm
