@@ -76,6 +76,7 @@ class Toolbar:
             ('campaign_mgr',    'Manage Campaigns', False),
             ('open_manual',     'User Manual',      False),
             ('reset_campaign',  'Reset Campaign',   False),
+            ('delete_campaign_quick', 'Delete Campaign', False),
             ('lock',            'Lock',             False),
             ('check_update',    'Check for Updates', False),
         ]),
@@ -3881,6 +3882,113 @@ class NewSceneChoicePopup:
         if self._gen_r.collidepoint(pos):
             return 'generate'
         if not self._box.collidepoint(pos):
+            return 'cancel'
+        return None
+
+    def key(self, event):
+        if event.key == pygame.K_ESCAPE:
+            return 'cancel'
+        return None
+
+
+# ── Quick delete-campaign dialog ──────────────────────────────────────────────
+
+class QuickDeleteCampaignDialog:
+    """Compact Campaign-menu control: a dropdown to pick a campaign (never
+    lists 'default' or the currently active one) plus a Delete button.
+    hit() returns ('delete', name), 'cancel', or None (still open)."""
+    W = 300
+    ROW_H = 34
+    PAD = 10
+    TITLE_H = 36
+
+    def __init__(self, campaigns, active, font, screen_w, screen_h):
+        self.font      = font
+        self.options   = [c for c in campaigns if c not in ('default', active)]
+        self.selected  = self.options[0] if self.options else None
+        self._expanded = False
+        self.H = self.TITLE_H + self.PAD * 3 + self.ROW_H * 2
+        self.x = (screen_w - self.W) // 2
+        self.y = (screen_h - self.H) // 2
+        self._close_r  = pygame.Rect(self.x + self.W - 34, self.y + 6, 28, 28)
+        self._box_r    = pygame.Rect(self.x + self.PAD, self.y + self.TITLE_H + self.PAD,
+                                     self.W - 2 * self.PAD, self.ROW_H)
+        self._delete_r = pygame.Rect(self.x + self.PAD, self._box_r.bottom + self.PAD,
+                                     self.W - 2 * self.PAD, self.ROW_H)
+        self._option_rects = []
+
+    def _layout_options(self):
+        self._option_rects = []
+        oy = self._box_r.bottom
+        for name in self.options:
+            r = pygame.Rect(self._box_r.x, oy, self._box_r.w, self.ROW_H)
+            self._option_rects.append((name, r))
+            oy += self.ROW_H
+
+    def draw(self, surface):
+        box = pygame.Rect(self.x, self.y, self.W, self.H)
+        pygame.draw.rect(surface, PANEL_BG,     box, border_radius=8)
+        pygame.draw.rect(surface, PANEL_BORDER, box, 2, border_radius=8)
+
+        title = self.font.render('Delete Campaign', True, WHITE)
+        surface.blit(title, (self.x + self.PAD, self.y + (self.TITLE_H - title.get_height()) // 2))
+        pygame.draw.rect(surface, (120, 30, 30), self._close_r, border_radius=4)
+        ct = self.font.render('X', True, WHITE)
+        surface.blit(ct, (self._close_r.centerx - ct.get_width() // 2,
+                          self._close_r.centery - ct.get_height() // 2))
+
+        # Dropdown box
+        pygame.draw.rect(surface, TOOLBAR_BTN,   self._box_r, border_radius=5)
+        pygame.draw.rect(surface, PANEL_BORDER,  self._box_r, 1, border_radius=5)
+        label = self.selected or 'No other campaigns'
+        lt = self.font.render(label, True, WHITE if self.selected else GRAY)
+        surface.blit(lt, (self._box_r.x + 8, self._box_r.centery - lt.get_height() // 2))
+        if self.options:
+            arrow = self.font.render('^' if self._expanded else 'v', True, LIGHT_GRAY)
+            surface.blit(arrow, (self._box_r.right - 22, self._box_r.centery - arrow.get_height() // 2))
+
+        # Delete button
+        can_delete = self.selected is not None
+        pygame.draw.rect(surface, (150, 40, 40) if can_delete else TOOLBAR_BTN,
+                         self._delete_r, border_radius=5)
+        dt = self.font.render('Delete', True, WHITE if can_delete else GRAY)
+        surface.blit(dt, (self._delete_r.centerx - dt.get_width() // 2,
+                          self._delete_r.centery - dt.get_height() // 2))
+
+        # Expanded option list is drawn last so it sits on top of anything below
+        if self._expanded:
+            self._layout_options()
+            for name, r in self._option_rects:
+                pygame.draw.rect(surface, (40, 44, 56), r)
+                pygame.draw.rect(surface, PANEL_BORDER, r, 1)
+                t = self.font.render(name, True, WHITE)
+                surface.blit(t, (r.x + 8, r.centery - t.get_height() // 2))
+
+    def hit(self, pos):
+        """Returns ('delete', name), 'cancel', or None (dialog stays open)."""
+        if self._close_r.collidepoint(pos):
+            return 'cancel'
+
+        if self._expanded:
+            self._layout_options()
+            for name, r in self._option_rects:
+                if r.collidepoint(pos):
+                    self.selected  = name
+                    self._expanded = False
+                    return None
+            self._expanded = False
+            if not self._box_r.collidepoint(pos):
+                return None   # click elsewhere just collapses the dropdown
+
+        if self._box_r.collidepoint(pos):
+            if self.options:
+                self._expanded = not self._expanded
+            return None
+
+        if self._delete_r.collidepoint(pos) and self.selected:
+            return ('delete', self.selected)
+
+        if not pygame.Rect(self.x, self.y, self.W, self.H).collidepoint(pos):
             return 'cancel'
         return None
 

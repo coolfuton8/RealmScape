@@ -31,7 +31,7 @@ else:
 
 from constants import *
 from entities  import Layer, Character, SceneMarker, SoundZone
-from ui        import Toolbar, ContextMenu, InitiativePanel, HPPopup, ConditionsPopup, CharacterDialog, EnemyDialog, SizePopup, NotesPanel, StatBlockPanel, NumberInputPopup, ScenePickerPopup, CampaignDialog, SoundZoneDialog, TabletopAudioBrowserDialog, HiddenItemDialog, TrapDialog, DCRollPopup, DCResultPopup, LockOverlay, HintPopup, ConfirmPopup, GroupHPPopup, NewSceneChoicePopup, DungeonGenDialog, DungeonGenProgressPopup, DungeonGenPreviewPopup
+from ui        import Toolbar, ContextMenu, InitiativePanel, HPPopup, ConditionsPopup, CharacterDialog, EnemyDialog, SizePopup, NotesPanel, StatBlockPanel, NumberInputPopup, ScenePickerPopup, CampaignDialog, SoundZoneDialog, TabletopAudioBrowserDialog, HiddenItemDialog, TrapDialog, DCRollPopup, DCResultPopup, LockOverlay, HintPopup, ConfirmPopup, GroupHPPopup, NewSceneChoicePopup, QuickDeleteCampaignDialog, DungeonGenDialog, DungeonGenProgressPopup, DungeonGenPreviewPopup
 import pin_manager
 from tools     import FogOfWar, AoeTool, MeasureTool
 import db
@@ -1230,6 +1230,8 @@ confirm_popup        = None   # ConfirmPopup for destructive actions
 group_hp_popup       = None   # GroupHPPopup for batch damage/heal
 scene_picker         = None   # ScenePickerPopup for dropping markers
 new_scene_popup      = None   # NewSceneChoicePopup (blank vs generate)
+delete_campaign_popup = None  # QuickDeleteCampaignDialog when open
+_pending_delete_campaign = None  # campaign name awaiting confirm_popup confirmation
 dungeon_gen_dialog   = None   # DungeonGenDialog when open
 _gen_queue: queue.Queue = queue.Queue()   # thread → main: generation result
 _pending_gen_path: str = ''               # path of last generated PNG
@@ -1456,9 +1458,17 @@ def switch_campaign(name: str):
     global active_campaign, characters, enemies, scenes, scene_markers
     global current_scene_idx, start_scene_id, current_zoom, bg_path
     global camera_x, camera_y, layers, fog, initiative_order, current_turn_idx
-    global target_entity, init_msg_popup, _init_msg_pending
+    global target_entity, init_msg_popup, _init_msg_pending, new_scene_popup
+    global dungeon_gen_dialog
     target_entity = None
     _transient_markers.clear()
+    # Discard any leftover new-scene-choice popup (and its Generate-Map
+    # follow-on dialog) from a previous switch_campaign() bootstrap — without
+    # this, a popup created for a still-empty campaign lingers after
+    # switching away and silently swallows every click in the new campaign,
+    # since it's checked before other dialogs in the event loop.
+    new_scene_popup    = None
+    dungeon_gen_dialog = None
 
     _save_current_scene_state()
 
@@ -1536,9 +1546,15 @@ def switch_campaign(name: str):
     # image or anything else scene-specific — set_bg_image() and friends
     # silently no-op without a current scene, so anything added before the
     # first scene exists would vanish the moment layers get rebuilt (e.g. by
-    # the zoom slider). Guarantee every loaded campaign has at least one.
+    # the zoom slider). This also reliably identifies a brand-new campaign
+    # (an existing one only reaches zero scenes if every scene was deleted).
     if not scenes:
-        _create_blank_scene()
+        # Ask the same Blank Map / Generate Map question the "+" button
+        # asks, instead of silently creating a blank scene.
+        new_scene_popup = NewSceneChoicePopup(font, WIDTH, HEIGHT)
+        # New campaigns default to Build Mode on, so hidden items/traps
+        # placed while stocking the first scene are visible immediately.
+        _set_build_mode(True)
 
 def set_bg_image(path):
     global layers, camera_x, camera_y
@@ -2036,6 +2052,13 @@ def _apply_confirm(pending):
             _update_apply_in_progress = True
             threading.Thread(target=_bg_apply_update, daemon=True,
                              name='update-apply').start()
+    elif pending == 'delete_campaign_quick':
+        global _pending_delete_campaign
+        name = _pending_delete_campaign
+        if name and name != 'default' and name != active_campaign:
+            campaigns_mod.delete(name)
+            dm_server.broadcast_state(_get_dm_state())
+        _pending_delete_campaign = None
 
 # ── Self-update (check GitHub, download, and apply in place) ─────────────────
 
@@ -2055,6 +2078,27 @@ def _bg_apply_update():
     success, message = updater.download_and_apply_update()
     _update_apply_queue.put({'success': success, 'message': message})
 
+def _set_build_mode(enabled: bool):
+    """Turn build mode on/off, matching the toolbar toggle's side effects
+    (forcing fog off while active and disabling the fog controls, restoring
+    the prior fog state on exit) — shared by the toolbar handler and by
+    switch_campaign()'s new-campaign bootstrap."""
+    global build_mode, _pre_build_fog
+    build_mode = enabled
+    toolbar.active['build_mode'] = enabled
+    if enabled:
+        _pre_build_fog = toolbar.active.get('fog_on', False)
+        toolbar.active['fog_on'] = False
+        toolbar.disabled_btns = set(_FOG_R_BTNS) | {'fog_on'}
+    else:
+        toolbar.disabled_btns.clear()
+        if _pre_build_fog is not None:
+            toolbar.active['fog_on'] = _pre_build_fog
+            s = current_scene()
+            if s:
+                db.save_scene_fog(s[0], _pre_build_fog, _current_fog_radius_cells())
+            _pre_build_fog = None
+
 # ── Handle toolbar action ─────────────────────────────────────────────────────
 
 def handle_toolbar(btn_id):
@@ -2064,7 +2108,6 @@ def handle_toolbar(btn_id):
     global _place_item_dialog, _place_trap_dialog, _place_pending_pos
     global _edit_item_dialog, _edit_trap_dialog, _edit_item_obj, _edit_trap_obj
     global dc_roll_popup, dc_result_popup, trap_flash_timer, init_msg_popup, _init_msg_pending
-    global build_mode, _pre_build_fog
     global _update_check_in_progress
 
     if btn_id == 'add_enemy':
@@ -2155,19 +2198,7 @@ def handle_toolbar(btn_id):
         show_zones = toolbar.active.get('show_zones', True)
 
     elif btn_id == 'build_mode':
-        build_mode = toolbar.active.get('build_mode', False)
-        if build_mode:
-            _pre_build_fog = toolbar.active.get('fog_on', False)  # save live toolbar state
-            toolbar.active['fog_on'] = False
-            toolbar.disabled_btns = set(_FOG_R_BTNS) | {'fog_on'}
-        else:
-            toolbar.disabled_btns.clear()
-            if _pre_build_fog is not None:
-                toolbar.active['fog_on'] = _pre_build_fog
-                s = current_scene()
-                if s:
-                    db.save_scene_fog(s[0], _pre_build_fog, _current_fog_radius_cells())
-                _pre_build_fog = None
+        _set_build_mode(toolbar.active.get('build_mode', False))
         dm_server.broadcast_state(_get_dm_state())
 
     elif btn_id == 'default_track':
@@ -2197,6 +2228,11 @@ def handle_toolbar(btn_id):
                 f'This cannot be undone.',
                 font, WIDTH, HEIGHT)
             confirm_popup._pending = 'campaign_reset'
+
+    elif btn_id == 'delete_campaign_quick':
+        global delete_campaign_popup
+        delete_campaign_popup = QuickDeleteCampaignDialog(
+            campaigns_mod.list_campaigns(), active_campaign, font, WIDTH, HEIGHT)
 
     elif btn_id == 'lock':
         if pin_manager.has_pin():
@@ -2676,7 +2712,7 @@ def _any_modal_open():
         zone_dialog, campaign_dialog, char_dialog, enemy_dialog, size_popup,
         stat_block_panel, notes_panel.visible, new_scene_popup, dungeon_gen_dialog,
         scene_picker, confirm_popup, group_hp_popup, num_input_popup, hp_popup,
-        conditions_popup, context_menu,
+        conditions_popup, context_menu, delete_campaign_popup,
     ])
 
 
@@ -3213,6 +3249,21 @@ while running:
                     new_scene_popup = None
                 continue
 
+            # Quick delete-campaign dropdown (Campaign menu)
+            if delete_campaign_popup:
+                result = delete_campaign_popup.hit(pos)
+                if result == 'cancel':
+                    delete_campaign_popup = None
+                elif isinstance(result, tuple) and result[0] == 'delete':
+                    _pending_delete_campaign = result[1]
+                    delete_campaign_popup = None
+                    confirm_popup = ConfirmPopup(
+                        f'Delete campaign "{result[1]}"?\n\n'
+                        f'This cannot be undone.',
+                        font, WIDTH, HEIGHT)
+                    confirm_popup._pending = 'delete_campaign_quick'
+                continue
+
             # Dungeon gen dialog (unified params + preview)
             if dungeon_gen_dialog:
                 ret = dungeon_gen_dialog.mouse_down(pos)
@@ -3587,6 +3638,12 @@ while running:
                 choice = new_scene_popup.key(event)
                 if choice == 'cancel':
                     new_scene_popup = None
+                continue
+            # Quick delete-campaign dropdown
+            if delete_campaign_popup:
+                choice = delete_campaign_popup.key(event)
+                if choice == 'cancel':
+                    delete_campaign_popup = None
                 continue
             # Dungeon gen dialog
             if dungeon_gen_dialog:
@@ -4092,6 +4149,7 @@ while running:
     if dc_roll_popup:      dc_roll_popup.draw(screen)
     if dc_result_popup:    dc_result_popup.draw(screen)
     if new_scene_popup:    new_scene_popup.draw(screen)
+    if delete_campaign_popup: delete_campaign_popup.draw(screen)
     if dungeon_gen_dialog:
         dungeon_gen_dialog.tick()
         dungeon_gen_dialog.draw(screen)

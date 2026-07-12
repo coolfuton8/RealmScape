@@ -122,6 +122,7 @@ to open its dropdown menu.
 | **Manage Campaigns** | Create, rename, delete, and switch campaigns |
 | **User Manual** | Open this manual in your browser |
 | **Reset Campaign** | Reset the active campaign to its initial state |
+| **Delete Campaign** | Quickly delete a campaign without opening Manage Campaigns — pick one from the dropdown and click Delete. The `default` campaign and the currently active campaign never appear in the list |
 | **Lock** | PIN-lock the map window so players cannot interact with it. Only works if the active campaign already has a PIN — see [Campaign PINs](#campaign-pins) |
 
 ---
@@ -284,7 +285,12 @@ token images, audio files, character data, and your notes.
 
 The active campaign is shown with `[active]` in green. You can have as many campaigns as you like —
 only one is active at a time. Use the **Del** button (red) to permanently delete a campaign and all
-its data.
+its data, or use **Campaign → Delete Campaign** for a quicker one-step dropdown-and-delete without
+opening this dialog.
+
+A brand-new campaign automatically turns on **Build Mode** (see [Section 2i](#2i--build-mode)) and,
+as soon as it becomes active, asks the same **Blank Map** / **Generate Map** question described
+below for its first scene — you don't need to click **+** yourself the first time.
 
 > Your campaign folder is created at `campaigns/<YourCampaignName>/`. An `initial_message.txt`
 > file is placed there — edit it to write a welcome note displayed to players each time the
