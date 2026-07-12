@@ -65,7 +65,7 @@ All devices must be on the same Wi-Fi or wired network.
 
 The GM Panel is divided into several sections:
 
-- **Header bar** — shows connection status (green **Connected** badge), **Lock** and **Set PIN** buttons, and the current DM URL.
+- **Header bar** — shows connection status (green **Connected** badge), a **Lock** button, and the current DM URL. Lock only does something if the active campaign has a PIN (see [Campaign PINs](#campaign-pins) below).
 - **Scenes** — lists every scene in the campaign. The active scene is highlighted in orange with a `*` prefix. Click any scene to switch to it.
 - **Party / Selected Token** — expand to see party HP and to interact with whichever token is currently selected on the map.
 - **Sound Zones** — toggle music on/off, manage zones, and set the default ambient track. Shows Spotify connection status when relevant.
@@ -92,8 +92,7 @@ to open its dropdown menu.
 | **Manage Campaigns** | Create, rename, delete, and switch campaigns |
 | **User Manual** | Open this manual in your browser |
 | **Reset Campaign** | Reset the active campaign to its initial state |
-| **Lock** | PIN-lock the map window so players cannot interact with it |
-| **Set PIN** | Set or change the GM PIN used to unlock the screen and access the web panel |
+| **Lock** | PIN-lock the map window so players cannot interact with it. Only works if the active campaign already has a PIN — see [Campaign PINs](#campaign-pins) |
 
 ---
 
@@ -736,7 +735,8 @@ rejected at the hardware level.
 - **Initiative Bonus** — set each character's DEX modifier under Character Settings. It is added
   automatically every time you roll initiative.
 - **Lock Screen** — Campaign → Lock PIN-protects the RealmScape window so players cannot tap
-  buttons on the TV. Unlock from the GM panel or by entering the PIN.
+  buttons on the TV. Unlock from the GM panel or by entering the PIN. Only available once the
+  active campaign has a PIN — see [Campaign PINs](#campaign-pins) below.
 - **Scene Notes** — in the GM panel expand **Scene Notes** to write private reminders (monster
   stats, read-aloud text, treasure lists). Notes are never shown on the player-facing screen.
 - **Initial Message** — edit `campaigns/<YourCampaign>/initial_message.txt` to write a welcome
@@ -760,6 +760,24 @@ rejected at the hardware level.
   movement so they don't get dragged around when you move the whole party.
 - **Startup cleanup** — RealmScape automatically removes orphaned database records on startup
   (scene data for deleted scenes, positions for deleted characters, etc.). No maintenance required.
+
+### Campaign PINs
+
+PINs are per-campaign, not system-wide. A campaign only gets a PIN when you **Save** (export) it
+from the GM panel's Campaign Manager — the first time you save a campaign, you're required to set
+a PIN for it before the download proceeds. The **default** campaign can never have a PIN.
+
+Once a campaign has a PIN:
+
+- Loading or switching into it — on the map window, from the GM panel, or on RealmScape startup —
+  immediately locks both screens. Nothing can be viewed or touched on the map window, and the GM
+  panel is locked out too, until that campaign's PIN is entered on either one.
+- The **Lock** button (map window toolbar and GM panel header) re-locks it on demand.
+- Campaigns without a PIN (including every campaign that existed before this feature, and any new
+  campaign you haven't saved yet) are never locked and need no PIN at all.
+
+**There is no way to recover a lost PIN.** Write it down somewhere safe when you set it — if it's
+forgotten, that campaign can never be loaded or played again.
 
 ---
 

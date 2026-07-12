@@ -98,156 +98,26 @@ if _AVAILABLE:
     _sio = SocketIO(_app, cors_allowed_origins='*', async_mode=_ASYNC_MODE,
                     logger=False, engineio_logger=False)
 
-    # ── Web access auth ───────────────────────────────────────────────────────
-    _AUTH_EXEMPT = {'/login', '/favicon.ico', '/api/web-login',
-                    '/api/web-setup-pin', '/api/pin-status', '/manual'}
-
-    _LOGIN_HTML = '''<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>RealmScape — DM Access</title>
-  <link rel="icon" type="image/png" href="/favicon.ico">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#111827;color:#e5e7eb;font-family:sans-serif;
-         display:flex;align-items:center;justify-content:center;min-height:100vh}
-    .card{background:#1f2937;border:1px solid #374151;border-radius:12px;
-          padding:32px 28px;width:300px;text-align:center}
-    h1{font-size:20px;margin-bottom:6px;color:#f9fafb}
-    .sub{font-size:13px;color:#9ca3af;margin-bottom:24px;min-height:36px;line-height:1.4}
-    .dots{display:flex;gap:10px;justify-content:center;margin-bottom:24px}
-    .dot{width:16px;height:16px;border-radius:50%;border:2px solid #4b5563;
-         background:transparent;transition:background .15s}
-    .dot.filled{background:#60a5fa;border-color:#60a5fa}
-    .dot.err{background:#ef4444;border-color:#ef4444}
-    .numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-    .key{background:#374151;border:none;color:#f9fafb;font-size:20px;
-         padding:14px;border-radius:8px;cursor:pointer;transition:background .1s}
-    .key:hover{background:#4b5563}
-    .key.del{color:#f87171}
-    .key.go{background:#1d4ed8;color:#fff}
-    .key.go:hover{background:#2563eb}
-    .errmsg{margin-top:16px;font-size:13px;color:#f87171;min-height:18px}
-  </style>
-</head>
-<body>
-<div class="card">
-  <h1>&#9876; RealmScape</h1>
-  <div class="sub" id="sub">Loading…</div>
-  <div class="dots" id="dots"></div>
-  <div class="numpad" id="pad"></div>
-  <div class="errmsg" id="msg"></div>
-</div>
-<script>
-const MAX=6;
-let mode='login',pin='',firstPin='';
-const SUBS={login:'Enter your DM PIN to continue',
-            setup:'No PIN set — create one to protect DM access',
-            confirm:'Re-enter the PIN to confirm'};
-async function init(){
-  const d=await(await fetch('/api/pin-status')).json();
-  mode=d.has_pin?'login':'setup';
-  document.getElementById('sub').textContent=SUBS[mode];
-  buildPad();renderDots();
-}
-function buildPad(){
-  const p=document.getElementById('pad');p.innerHTML='';
-  for(const k of['1','2','3','4','5','6','7','8','9','⌫','0','✓']){
-    const b=document.createElement('button');
-    b.className='key'+(k==='⌫'?' del':k==='✓'?' go':'');
-    b.textContent=k;b.onclick=()=>press(k);p.appendChild(b);
-  }
-}
-function renderDots(){
-  document.getElementById('dots').innerHTML=
-    Array.from({length:MAX},(_,i)=>'<div class="dot'+(i<pin.length?' filled':'')+'"></div>').join('');
-}
-function flash(){
-  document.querySelectorAll('.dot').forEach(d=>{d.className='dot err';});
-  setTimeout(()=>{pin='';renderDots();document.getElementById('msg').textContent='';},700);
-}
-function press(k){
-  document.getElementById('msg').textContent='';
-  if(k==='⌫'){pin=pin.slice(0,-1);renderDots();return;}
-  if(k==='✓'){submit();return;}
-  if(pin.length>=MAX)return;
-  pin+=k;renderDots();
-  if(pin.length===MAX)setTimeout(submit,120);
-}
-async function submit(){
-  if(!pin)return;
-  if(mode==='login'){
-    const r=await fetch('/api/web-login',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
-    if(r.ok){location.href='/';return;}
-    document.getElementById('msg').textContent='Incorrect PIN';flash();
-  }else if(mode==='setup'){
-    if(pin.length<4){document.getElementById('msg').textContent='Use at least 4 digits';return;}
-    firstPin=pin;pin='';mode='confirm';
-    document.getElementById('sub').textContent=SUBS.confirm;renderDots();
-  }else{
-    if(pin!==firstPin){
-      document.getElementById('msg').textContent='PINs do not match — try again';
-      mode='setup';firstPin='';
-      document.getElementById('sub').textContent=SUBS.setup;flash();return;
-    }
-    const r=await fetch('/api/web-setup-pin',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
-    if(r.ok){location.href='/';return;}
-    const d=await r.json();
-    document.getElementById('msg').textContent=d.error||'Error';flash();
-  }
-}
-document.addEventListener('keydown',e=>{
-  if(e.key>='0'&&e.key<='9')press(e.key);
-  else if(e.key==='Backspace')press('⌫');
-  else if(e.key==='Enter')press('✓');
-});
-init();
-</script>
-</body>
-</html>'''
+    # ── Web access gate ────────────────────────────────────────────────────────
+    # There is no separate login page — each campaign's PIN (if it has one) is
+    # set once, via the "Save" flow, and gates BOTH the desktop touchscreen and
+    # this web panel through the single shared pin_manager.locked flag. A
+    # campaign with no PIN (including 'default') is never locked at all: the
+    # main page and static assets always load; dm.html's own in-page lock
+    # overlay (driven by `locked` in the state broadcast) blocks interaction,
+    # and this guard blocks the API calls that would let a locked-out session
+    # actually manipulate anything.
+    _LOCK_EXEMPT_API = {'/api/pin-status', '/api/unlock'}
 
     @_app.before_request
     def _guard():
-        from flask import session, redirect
-        if request.path in _AUTH_EXEMPT or request.path.startswith('/socket.io') or request.path.startswith('/manual/'):
+        if not pin_manager.locked:
             return None
-        if not session.get('dm_auth'):
-            if request.path.startswith('/api/'):
-                return make_response(jsonify({'error': 'Not authenticated'}), 401)
-            return redirect('/login')
-
-    @_app.route('/login')
-    def _login_page():
-        return make_response(_LOGIN_HTML)
-
-    @_app.route('/api/web-login', methods=['POST'])
-    def _api_web_login():
-        from flask import session
-        data = request.get_json(silent=True) or {}
-        pin  = str(data.get('pin', ''))
-        if not pin_manager.has_pin():
-            return jsonify({'error': 'No PIN set — set one first'}), 400
-        if pin_manager.verify_pin(pin):
-            session['dm_auth'] = True
-            return jsonify({'ok': True})
-        return jsonify({'error': 'Incorrect PIN'}), 401
-
-    @_app.route('/api/web-setup-pin', methods=['POST'])
-    def _api_web_setup_pin():
-        from flask import session
-        if pin_manager.has_pin():
-            return jsonify({'error': 'PIN already set — use login instead'}), 400
-        data = request.get_json(silent=True) or {}
-        pin  = str(data.get('pin', ''))
-        if len(pin) < 4:
-            return jsonify({'error': 'PIN must be at least 4 digits'}), 400
-        pin_manager.set_pin(pin)
-        session['dm_auth'] = True
-        return jsonify({'ok': True})
+        if request.path.startswith('/socket.io') or request.path.startswith('/manual/'):
+            return None
+        if request.path.startswith('/api/') and request.path not in _LOCK_EXEMPT_API:
+            return make_response(jsonify({'error': 'Locked — enter the PIN to continue'}), 401)
+        return None
 
     @_app.route('/')
     def _index():
@@ -561,9 +431,6 @@ async function manualCode() {{
 
     @_app.route('/api/tta-tracks')
     def _tta_tracks():
-        from flask import session
-        if not session.get('dm_auth'):
-            return jsonify(error='Unauthorized'), 403
         tracks = _load_tta_tracks()
         return jsonify(tracks=tracks)
 
@@ -675,6 +542,8 @@ async function manualCode() {{
                 return jsonify({'error': 'Cannot export the default campaign'}), 400
             if name not in cm.list_campaigns():
                 return jsonify({'error': 'Campaign not found'}), 404
+            if not pin_manager.has_pin(name):
+                return jsonify({'error': 'Set a PIN for this campaign before saving it'}), 400
             data = cm.export_zip(name)
             return send_file(io.BytesIO(data), as_attachment=True,
                              download_name=f'{name}.zip', mimetype='application/zip')
@@ -740,16 +609,30 @@ async function manualCode() {{
             return jsonify({'ok': True, 'locked': False})
         return jsonify({'error': 'Incorrect PIN'}), 401
 
-    @_app.route('/api/set-pin', methods=['POST'])
-    def _api_set_pin():
-        if pin_manager.locked:
-            return jsonify({'error': 'Unlock the session first.'}), 403
-        data = request.get_json(silent=True) or {}
-        pin  = str(data.get('pin', ''))
-        if not pin:
-            return jsonify({'error': 'PIN required'}), 400
-        pin_manager.set_pin(pin)
-        return jsonify({'ok': True})
+    @_app.route('/api/campaigns/<name>/set-pin', methods=['POST'])
+    def _api_campaigns_set_pin(name):
+        """First-time PIN setup for a campaign, required before it can be
+        Saved (exported). Refuses 'default' and refuses to overwrite an
+        existing PIN — there is no "change PIN" flow, by design."""
+        try:
+            import campaigns as cm
+            if name == 'default':
+                return jsonify({'error': 'The default campaign can never have a PIN'}), 400
+            if name not in cm.list_campaigns():
+                return jsonify({'error': 'Campaign not found'}), 404
+            if pin_manager.has_pin(name):
+                return jsonify({'error': 'This campaign already has a PIN'}), 409
+            data = request.get_json(silent=True) or {}
+            pin  = str(data.get('pin', ''))
+            if len(pin) < 4:
+                return jsonify({'error': 'PIN must be at least 4 digits'}), 400
+            pin_manager.set_pin(name, pin)
+            # Deliberately does NOT lock immediately — the DM just typed this
+            # PIN in order to Save right now; it only takes effect (requires
+            # entry) the next time this campaign is loaded/switched to.
+            return jsonify({'ok': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
     # ── User Manual ───────────────────────────────────────────────────────────
 
@@ -904,9 +787,6 @@ async function manualCode() {{
     @_sio.on('connect')
     def _on_connect():
         global _dm_client_count
-        from flask import session
-        if not session.get('dm_auth'):
-            return False  # reject unauthenticated SocketIO connections
         _dm_client_count += 1
         cmd_queue.put({'type': '_request_state'})
 

@@ -112,8 +112,11 @@ The DM Panel is a webpage you can open on any device connected to the same Wi-Fi
 
 1. Look at the title bar of the RealmScape window — it shows an address like `http://192.168.1.10:5000`
 2. On any device on the same Wi-Fi, open a web browser and go to that address
-3. If this is your first time, you'll be asked to create a PIN — this keeps others on the network from accessing your DM controls
-4. Once logged in, you'll see the DM Panel where you can control initiative, HP, scenes, music, and more
+3. You'll see the DM Panel where you can control initiative, HP, scenes, music, and more
+
+By default there's no login — anyone on your network who opens that address gets straight in. A
+campaign is only PIN-protected once you set a PIN for it via the panel's "Save" (export) feature;
+see the full manual's "Campaign PINs" section for details.
 
 > If you're only using one computer and don't need a second device, you can also open the DM Panel on the same machine at `http://localhost:5000`.
 

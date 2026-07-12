@@ -276,7 +276,6 @@ body {
   <h1>RealmScape — GM Panel</h1>
   <span id="conn-status">Connecting…</span>
   <button id="lock-btn" onclick="handleLockBtn()">Lock</button>
-  <button class="btn" style="font-size:11px;padding:3px 8px" onclick="openPinSetup()">Set PIN</button>
   <a href="/manual" target="_blank" class="btn" style="font-size:11px;padding:3px 8px;text-decoration:none;">User Manual</a>
   <span id="server-hint"></span>
 </div>
@@ -2160,6 +2159,11 @@ async function deleteCampaign(name) {
 }
 
 function exportCampaign(name) {
+  const hasPin = !!(G && G.campaign && G.campaign.has_pin && G.campaign.has_pin[name]);
+  if (!hasPin) {
+    openPinSetup(name);   // first save ever — must set a PIN before it can be exported
+    return;
+  }
   window.location.href = '/api/campaigns/' + encodeURIComponent(name) + '/export';
 }
 
@@ -2212,6 +2216,7 @@ document.getElementById('next-btn').onclick = () => send('next_turn');
 // ── PIN Lock ──────────────────────────────────────────────────────────────────
 let _lockInput = '';
 let _setupPin1 = '', _setupPin2 = '', _setupPhase = 1;
+let _pinSetupTarget = null;   // campaign name currently being given its first PIN
 
 function _updateDots(id, val, slots) {
   const c = document.getElementById(id);
@@ -2268,13 +2273,14 @@ function setupPad(key) {
         _setupPin1 = ''; _setupPin2 = ''; _setupPhase = 1;
         phase.textContent = 'Enter new PIN:'; _updateDots('pin-setup-dots', ''); return;
       }
-      fetch('/api/set-pin', { method: 'POST',
+      const target = _pinSetupTarget;
+      fetch(`/api/campaigns/${encodeURIComponent(target)}/set-pin`, { method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({pin: _setupPin1}) })
       .then(r => r.json()).then(d => {
         if (d.ok) {
           closePinSetup();
-          fetch('/api/lock', {method: 'POST'});
+          exportCampaign(target);   // proceed with the Save the DM asked for
         } else { err.textContent = d.error || 'Error'; }
       }).catch(() => { err.textContent = 'Network error'; });
       return;
@@ -2286,8 +2292,11 @@ function setupPad(key) {
   _updateDots('pin-setup-dots', cur);
 }
 
-function openPinSetup() {
+function openPinSetup(campaignName) {
+  _pinSetupTarget = campaignName;
   _setupPin1 = ''; _setupPin2 = ''; _setupPhase = 1;
+  const title = document.getElementById('pin-modal-title');
+  if (title) title.textContent = `Set a PIN to Save "${campaignName}"`;
   const p = document.getElementById('pin-modal-phase');
   if (p) p.textContent = 'Enter new PIN:';
   const e = document.getElementById('pin-setup-error');
@@ -2297,6 +2306,7 @@ function openPinSetup() {
 }
 
 function closePinSetup() {
+  _pinSetupTarget = null;
   _setupPin1 = ''; _setupPin2 = ''; _setupPhase = 1;
   const p = document.getElementById('pin-modal-phase');
   if (p) p.textContent = 'Enter new PIN:';
@@ -2313,7 +2323,7 @@ async function handleLockBtn() {
   if (d.has_pin) {
     await fetch('/api/lock', {method: 'POST'});
   } else {
-    openPinSetup();
+    alert('The active campaign has no PIN set. Save (export) it from the Campaign menu to set one.');
   }
 }
 
@@ -2392,7 +2402,12 @@ function _applyLockState() {
 <!-- PIN setup modal -->
 <div id="pin-modal-bg" class="hidden">
   <div id="pin-modal">
-    <h3>Setup Lock PIN</h3>
+    <h3 id="pin-modal-title">Set a PIN to Save</h3>
+    <div style="font-size:11px;color:#f0a020;margin-bottom:10px;line-height:1.4;">
+      This campaign has no PIN yet — one is required before it can be saved.
+      <b>Remember this PIN.</b> If it's lost, this campaign cannot be loaded
+      or played again.
+    </div>
     <div id="pin-modal-phase" style="font-size:12px;color:#8899aa;margin-bottom:8px">Enter new PIN:</div>
     <div class="pin-dots" id="pin-setup-dots"></div>
     <div class="pin-error" id="pin-setup-error"></div>

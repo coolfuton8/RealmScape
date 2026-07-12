@@ -77,7 +77,6 @@ class Toolbar:
             ('open_manual',     'User Manual',      False),
             ('reset_campaign',  'Reset Campaign',   False),
             ('lock',            'Lock',             False),
-            ('setup_pin',       'Set PIN',          False),
             ('check_update',    'Check for Updates', False),
         ]),
         ('combat', 'Combat', (130, 45, 45), [
@@ -3172,106 +3171,6 @@ def _draw_numpad(surface, font, keys, bw, bh):
         lt = font.render(lbl, True, WHITE)
         surface.blit(lt, (r.centerx - lt.get_width()//2,
                           r.centery - lt.get_height()//2))
-
-
-# ── PIN setup dialog ──────────────────────────────────────────────────────────
-
-class PinSetupDialog:
-    """Two-phase numpad dialog for setting the lock PIN. Returns ('set_pin', pin) on success."""
-    W, H, PAD = 330, 440, 20
-    _BW, _BH, _BG = 88, 68, 6
-
-    def __init__(self, font, screen_w, screen_h):
-        self.font   = font
-        self.bx     = (screen_w - self.W) // 2
-        self.by     = (screen_h - self.H) // 2
-        self._phase = 1
-        self._pin1  = ''
-        self._input = ''
-        self._error = ''
-        self._build_rects()
-
-    def _build_rects(self):
-        bx, by = self.bx, self.by
-        bw, bh, bg = self._BW, self._BH, self._BG
-        self._close_r = pygame.Rect(bx + self.W - self.PAD - 28, by + 8, 28, 28)
-        nx = bx + (self.W - 3*bw - 2*bg) // 2
-        ny = by + 128
-        self._keys = [
-            ('1', nx,           ny),          ('2', nx+bw+bg,     ny),
-            ('3', nx+2*(bw+bg), ny),          ('4', nx,           ny+bh+bg),
-            ('5', nx+bw+bg,     ny+bh+bg),    ('6', nx+2*(bw+bg), ny+bh+bg),
-            ('7', nx,           ny+2*(bh+bg)),('8', nx+bw+bg,     ny+2*(bh+bg)),
-            ('9', nx+2*(bw+bg), ny+2*(bh+bg)),('CLR', nx,         ny+3*(bh+bg)),
-            ('0', nx+bw+bg,     ny+3*(bh+bg)),('OK',  nx+2*(bw+bg), ny+3*(bh+bg)),
-        ]
-        self._key_r = {lbl: pygame.Rect(x, y, bw, bh) for lbl, x, y in self._keys}
-
-    def handle_event(self, ev):
-        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-            pos = ev.pos
-            if self._close_r.collidepoint(pos):
-                return 'cancel'
-            for lbl, r in self._key_r.items():
-                if r.collidepoint(pos):
-                    return self._tap(lbl)
-        elif ev.type == pygame.KEYDOWN:
-            if ev.key == pygame.K_ESCAPE:
-                return 'cancel'
-            if ev.unicode.isdigit():
-                return self._tap(ev.unicode)
-            if ev.key == pygame.K_BACKSPACE:
-                self._input = self._input[:-1]
-            if ev.key == pygame.K_RETURN:
-                return self._tap('OK')
-        return None
-
-    def _tap(self, lbl):
-        if lbl.isdigit():
-            if len(self._input) < 8: self._input += lbl
-            self._error = ''
-        elif lbl == 'CLR':
-            self._input = self._input[:-1]; self._error = ''
-        elif lbl == 'OK':
-            if not self._input:
-                self._error = 'Enter at least 1 digit'; return None
-            if self._phase == 1:
-                self._pin1 = self._input; self._input = ''; self._phase = 2
-            else:
-                if self._input == self._pin1:
-                    return ('set_pin', self._pin1)
-                self._error = 'PINs do not match — try again'
-                self._input = ''; self._phase = 1; self._pin1 = ''
-        return None
-
-    def draw(self, surface):
-        dim = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 160))
-        surface.blit(dim, (0, 0))
-        bx, by = self.bx, self.by
-        box = pygame.Rect(bx, by, self.W, self.H)
-        pygame.draw.rect(surface, (18, 26, 44), box, border_radius=10)
-        pygame.draw.rect(surface, (40, 100, 160), box, 2, border_radius=10)
-
-        tl = self.font.render('Setup Lock PIN', True, (140, 200, 255))
-        surface.blit(tl, (bx + self.W//2 - tl.get_width()//2, by + 12))
-
-        pygame.draw.rect(surface, (130, 40, 40), self._close_r, border_radius=4)
-        xl = self.font.render('X', True, WHITE)
-        surface.blit(xl, (self._close_r.centerx - xl.get_width()//2,
-                          self._close_r.centery - xl.get_height()//2))
-
-        phase_lbl = 'Enter new PIN:' if self._phase == 1 else 'Confirm PIN:'
-        pl = self.font.render(phase_lbl, True, LIGHT_GRAY)
-        surface.blit(pl, (bx + self.W//2 - pl.get_width()//2, by + 48))
-
-        _draw_pin_dots(surface, self.font, bx + self.W//2, by + 76, self._input)
-
-        if self._error:
-            et = self.font.render(self._error, True, (220, 80, 80))
-            surface.blit(et, (bx + self.W//2 - et.get_width()//2, by + 106))
-
-        _draw_numpad(surface, self.font, self._keys, self._BW, self._BH)
 
 
 # ── Lock overlay ──────────────────────────────────────────────────────────────

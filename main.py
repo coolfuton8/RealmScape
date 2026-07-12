@@ -31,7 +31,7 @@ else:
 
 from constants import *
 from entities  import Layer, Character, SceneMarker, SoundZone
-from ui        import Toolbar, ContextMenu, InitiativePanel, HPPopup, ConditionsPopup, CharacterDialog, EnemyDialog, SizePopup, NotesPanel, StatBlockPanel, NumberInputPopup, ScenePickerPopup, CampaignDialog, SoundZoneDialog, TabletopAudioBrowserDialog, HiddenItemDialog, TrapDialog, DCRollPopup, DCResultPopup, PinSetupDialog, LockOverlay, HintPopup, ConfirmPopup, GroupHPPopup, NewSceneChoicePopup, DungeonGenDialog, DungeonGenProgressPopup, DungeonGenPreviewPopup
+from ui        import Toolbar, ContextMenu, InitiativePanel, HPPopup, ConditionsPopup, CharacterDialog, EnemyDialog, SizePopup, NotesPanel, StatBlockPanel, NumberInputPopup, ScenePickerPopup, CampaignDialog, SoundZoneDialog, TabletopAudioBrowserDialog, HiddenItemDialog, TrapDialog, DCRollPopup, DCResultPopup, LockOverlay, HintPopup, ConfirmPopup, GroupHPPopup, NewSceneChoicePopup, DungeonGenDialog, DungeonGenProgressPopup, DungeonGenPreviewPopup
 import pin_manager
 from tools     import FogOfWar, AoeTool, MeasureTool
 import db
@@ -47,6 +47,7 @@ active_campaign = campaigns_mod.get_active()
 if active_campaign not in campaigns_mod.list_campaigns():
     campaigns_mod.create(active_campaign)
 db.set_db_path(campaigns_mod.db_path(active_campaign))
+pin_manager.set_active_campaign(active_campaign)
 
 # ── DB init ───────────────────────────────────────────────────────────────────
 db.init_db()
@@ -863,8 +864,9 @@ def _get_dm_state():
             for m in scene_markers
         ],
         'campaign': {
-            'active': active_campaign,
-            'all':    campaigns_mod.list_campaigns(),
+            'active':  active_campaign,
+            'all':     campaigns_mod.list_campaigns(),
+            'has_pin': {n: pin_manager.has_pin(n) for n in campaigns_mod.list_campaigns()},
         },
         'sound_zones': [
             {'id': z.id, 'name': z.name, 'x': z.x, 'y': z.y,
@@ -1216,7 +1218,6 @@ campaign_dialog      = None   # CampaignDialog when open
 zone_dialog          = None   # SoundZoneDialog when open
 tta_browser          = None   # TabletopAudioBrowserDialog when open
 lock_overlay         = None   # LockOverlay when session is locked
-pin_setup_dialog     = None   # PinSetupDialog when setting up PIN
 
 
 # ── Restore scene-specific character positions and centre camera on players ───
@@ -1441,6 +1442,7 @@ def switch_campaign(name: str):
     campaigns_mod.set_active(name)
     active_campaign = name
     db.set_db_path(campaigns_mod.db_path(name))
+    pin_manager.set_active_campaign(name)
     db.init_db()
     db.cleanup_orphaned_records()
 
@@ -2159,15 +2161,14 @@ def handle_toolbar(btn_id):
             confirm_popup._pending = 'campaign_reset'
 
     elif btn_id == 'lock':
-        global lock_overlay, pin_setup_dialog
-        if not pin_manager.has_pin():
-            pin_setup_dialog = PinSetupDialog(font, WIDTH, HEIGHT)
+        if pin_manager.has_pin():
+            pin_manager.lock()   # LockOverlay appears via the per-frame sync below
         else:
-            pin_manager.lock()
-            lock_overlay = LockOverlay(font, WIDTH, HEIGHT)
-
-    elif btn_id == 'setup_pin':
-        pin_setup_dialog = PinSetupDialog(font, WIDTH, HEIGHT)
+            init_msg_popup = HintPopup(font, small_font, WIDTH, HEIGHT,
+                "This campaign has no PIN set.\n\n"
+                "Save (export) it from the web GM panel to set one — "
+                "the default campaign can never have a PIN.",
+                title='No PIN Set')
 
     elif btn_id == 'check_update':
         if not _update_check_in_progress:
@@ -2666,8 +2667,9 @@ while running:
         pygame.display.set_caption(
             f"RealmScape — {active_campaign}  |  GM Panel: {_cur_url}")
 
-    # ── Sync lock overlay with pin_manager state (web panel may have changed it)
-    if pin_manager.locked and lock_overlay is None and pin_setup_dialog is None:
+    # ── Sync lock overlay with pin_manager state (web panel may have changed it,
+    # or loading/switching to a PIN-protected campaign locks automatically)
+    if pin_manager.locked and lock_overlay is None:
         lock_overlay = LockOverlay(font, WIDTH, HEIGHT)
     elif not pin_manager.locked and lock_overlay is not None:
         lock_overlay = None
@@ -2766,20 +2768,6 @@ while running:
                     lock_overlay = None
                 else:
                     lock_overlay.wrong_pin()
-
-        # ── PIN setup dialog intercepts everything except QUIT ──────────────
-        elif pin_setup_dialog:
-            if event.type == pygame.FINGERUP:
-                event = pygame.event.Event(pygame.MOUSEBUTTONDOWN,
-                    {'button': 1, 'pos': (int(event.x * WIDTH), int(event.y * HEIGHT))})
-            result = pin_setup_dialog.handle_event(event)
-            if result == 'cancel':
-                pin_setup_dialog = None
-            elif isinstance(result, tuple) and result[0] == 'set_pin':
-                pin_manager.set_pin(result[1])
-                pin_setup_dialog = None
-                pin_manager.lock()
-                lock_overlay = LockOverlay(font, WIDTH, HEIGHT)
 
         # ── Window resize / move (SDL2 events, no polling needed) ──────────
         elif event.type == pygame.VIDEORESIZE:
@@ -4062,7 +4050,6 @@ while running:
     if _place_trap_dialog: _place_trap_dialog.draw(screen)
     if _edit_item_dialog:  _edit_item_dialog.draw(screen)
     if _edit_trap_dialog:  _edit_trap_dialog.draw(screen)
-    if pin_setup_dialog:   pin_setup_dialog.draw(screen)
     if lock_overlay:       lock_overlay.draw(screen)
     if dc_roll_popup:      dc_roll_popup.draw(screen)
     if dc_result_popup:    dc_result_popup.draw(screen)
