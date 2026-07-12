@@ -779,6 +779,21 @@ Once a campaign has a PIN:
 **There is no way to recover a lost PIN.** Write it down somewhere safe when you set it — if it's
 forgotten, that campaign can never be loaded or played again.
 
+### Demo Mode
+
+Intended for a public/kiosk install (a convention booth, a shared machine) rather than normal
+personal use. To turn it on, create an empty file named `DEMO_MODE` in the RealmScape folder
+(next to `VERSION`) and restart. While it's present:
+
+- RealmScape always boots into the **default** campaign, regardless of whatever campaign was
+  active when it last closed.
+- Any other campaign with **no PIN** that hasn't been loaded in 30 days is automatically deleted
+  on startup, to keep leftover campaigns from previous visitors from piling up. This check runs
+  silently (no popup) and just prints what it removed to the console. Campaigns with a PIN are
+  never purged, however old.
+
+Delete the `DEMO_MODE` file (and restart) to return to normal behavior.
+
 ---
 
 ## Part 7 — Troubleshooting

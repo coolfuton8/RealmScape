@@ -43,10 +43,19 @@ import telemetry
 
 # ── Campaign init (must happen before db.init_db) ────────────────────────────
 campaigns_mod.migrate_legacy_db()
-active_campaign = campaigns_mod.get_active()
+
+if campaigns_mod.is_demo_mode():
+    for _purged_name in campaigns_mod.purge_stale_campaigns(days=30):
+        print(f'[Demo Mode] Purged stale campaign (no PIN, unused 30+ days): {_purged_name}')
+    active_campaign = 'default'
+    campaigns_mod.set_active(active_campaign)
+else:
+    active_campaign = campaigns_mod.get_active()
+
 if active_campaign not in campaigns_mod.list_campaigns():
     campaigns_mod.create(active_campaign)
 db.set_db_path(campaigns_mod.db_path(active_campaign))
+campaigns_mod.touch_last_loaded(active_campaign)
 pin_manager.set_active_campaign(active_campaign)
 
 # ── DB init ───────────────────────────────────────────────────────────────────
@@ -1440,6 +1449,7 @@ def switch_campaign(name: str):
     _save_current_scene_state()
 
     campaigns_mod.set_active(name)
+    campaigns_mod.touch_last_loaded(name)
     active_campaign = name
     db.set_db_path(campaigns_mod.db_path(name))
     pin_manager.set_active_campaign(name)

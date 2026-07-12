@@ -19,6 +19,7 @@ echo   [Personal / runtime state]
 echo     campaigns\active.json
 echo     characters.db
 echo     .install_id  (anonymous telemetry id)
+echo     DEMO_MODE  (demo/kiosk mode toggle)
 echo     All campaign folders except "default"
 echo.
 echo   [Cache and generated files]
@@ -47,6 +48,7 @@ call :remove_file "spotify_auth.json"
 call :remove_file "campaigns\active.json"
 call :remove_file "characters.db"
 call :remove_file ".install_id"
+call :remove_file "DEMO_MODE"
 
 :: ── Non-default campaign folders ─────────────────────────────
 for /d %%C in ("campaigns\*") do (

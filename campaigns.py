@@ -5,11 +5,13 @@ import shutil
 import re
 import io
 import sqlite3
+import time
 import zipfile
 
 _BASE         = os.path.dirname(os.path.abspath(__file__))
 CAMPAIGNS_DIR = os.path.join(_BASE, 'campaigns')
 _META_FILE    = os.path.join(CAMPAIGNS_DIR, 'active.json')
+_DEMO_MODE_FILE = os.path.join(_BASE, 'DEMO_MODE')
 # Block only characters Windows forbids in folder names: \ / : * ? " < > |
 _FORBIDDEN = re.compile(r'[\\/:*?"<>|]')
 
@@ -122,6 +124,57 @@ def remove_dir(name: str):
 
     import threading
     threading.Thread(target=_delete, daemon=True, name='campaign-cleanup').start()
+
+
+# ── Demo mode ──────────────────────────────────────────────────────────────
+
+def is_demo_mode() -> bool:
+    """Demo mode is on when a DEMO_MODE file sits next to VERSION in the app
+    root — for a public/kiosk install: always boots into 'default', and
+    purges abandoned unprotected campaigns to keep the system clean."""
+    return os.path.isfile(_DEMO_MODE_FILE)
+
+
+def touch_last_loaded(name: str):
+    """Record that `name` was just made active — used to age out unused,
+    unprotected campaigns in demo mode."""
+    try:
+        with open(os.path.join(campaign_path(name), '.last_loaded'), 'w') as f:
+            f.write(str(time.time()))
+    except OSError:
+        pass
+
+
+def _last_loaded_time(name: str) -> float:
+    path = os.path.join(campaign_path(name), '.last_loaded')
+    try:
+        with open(path) as f:
+            return float(f.read().strip())
+    except Exception:
+        pass
+    # Never explicitly loaded (e.g. created but abandoned) — fall back to
+    # the folder's creation time so it still ages out eventually.
+    try:
+        return os.path.getctime(campaign_path(name))
+    except OSError:
+        return 0.0   # unreadable — treat as very old so it's eligible
+
+
+def purge_stale_campaigns(days: int = 30) -> list:
+    """Delete every non-default campaign that has no PIN and hasn't been
+    loaded in `days` days. Only meant to be called in demo mode. Returns the
+    list of campaign names that were purged."""
+    cutoff = time.time() - days * 86400
+    purged = []
+    for name in list_campaigns():
+        if name == 'default':
+            continue
+        if os.path.isfile(os.path.join(campaign_path(name), '.pin')):
+            continue   # PIN-protected campaigns are never purged
+        if _last_loaded_time(name) < cutoff:
+            if delete(name):
+                purged.append(name)
+    return purged
 
 
 def resolve_image_path(path: str) -> str:

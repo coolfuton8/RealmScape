@@ -2,6 +2,7 @@
 /cache/
 spotify_auth.json
 .install_id
+DEMO_MODE
 *.pyc
 __pycache__/
 *.db-shm
