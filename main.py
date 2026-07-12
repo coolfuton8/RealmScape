@@ -1532,6 +1532,14 @@ def switch_campaign(name: str):
         _init_msg_pending = True
         init_msg_popup    = None
 
+    # A campaign with zero scenes has nowhere to persist a dropped background
+    # image or anything else scene-specific — set_bg_image() and friends
+    # silently no-op without a current scene, so anything added before the
+    # first scene exists would vanish the moment layers get rebuilt (e.g. by
+    # the zoom slider). Guarantee every loaded campaign has at least one.
+    if not scenes:
+        _create_blank_scene()
+
 def set_bg_image(path):
     global layers, camera_x, camera_y
     layers = rebuild_layers(path, WIDTH, HEIGHT, current_zoom)
