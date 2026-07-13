@@ -917,10 +917,11 @@ function drawMap() {
     ctx.setLineDash([]);
   }
 
-  // Scene markers
+  // Scene markers (transient return portals and permanent ones alike hide under fog)
   for (const m of (G.markers || [])) {
     const draggingThis = pressedMarker && markerDragOrig &&
                          m === pressedMarker && markerPressStart;
+    if (!draggingThis && isPointFogHidden(m.x, m.y)) continue;
     const wx = draggingThis ? m._dragX ?? m.x : m.x;
     const wy = draggingThis ? m._dragY ?? m.y : m.y;
     const [sx, sy] = w2c(wx, wy);
@@ -1053,11 +1054,8 @@ function drawMap() {
     ctx.textBaseline = 'alphabetic';
   }
 
-  // All tokens
-  const all = [
-    ...(G.characters || []).map(c => ({ ...c, isEnemy: false })),
-    ...(G.enemies    || []).map(e => ({ ...e, isEnemy: true  })),
-  ];
+  // All tokens (NPCs/enemies hidden by fog of war, same rule as the tabletop view)
+  const all = allTokens().filter(t => !isFogHidden(t));
   for (const t of all) {
     const [sx, sy] = w2c(t.x, t.y);
     const r = Math.max(5, (t.size || 20) * scale);
@@ -1138,6 +1136,7 @@ function drawMap() {
 function markerAt(cx, cy) {
   if (!G) return null;
   for (const m of (G.markers || [])) {
+    if (isPointFogHidden(m.x, m.y)) continue;
     const [sx, sy] = w2c(m.x, m.y);
     const r = Math.max(8, 22 * scale) + 6;   // matches draw radius + small padding
     if ((cx - sx) ** 2 + (cy - sy) ** 2 <= r * r) return m;
@@ -1145,12 +1144,29 @@ function markerAt(cx, cy) {
   return null;
 }
 
-function tokenAt(cx, cy) {
-  if (!G) return null;
-  const all = [
+function allTokens() {
+  if (!G) return [];
+  return [
     ...(G.characters || []).map(c => ({ ...c, isEnemy: false })),
     ...(G.enemies    || []).map(e => ({ ...e, isEnemy: true  })),
   ];
+}
+
+function isPointFogHidden(x, y) {
+  if (!G || !G.fog_on) return false;
+  const vr = G.vision_radius || 0;
+  const party = (G.characters || []).filter(c => !c.is_npc);
+  return !party.some(c => Math.hypot(x - c.x, y - c.y) <= vr);
+}
+
+function isFogHidden(t) {
+  if (!(t.is_npc || t.isEnemy)) return false;
+  return isPointFogHidden(t.x, t.y);
+}
+
+function tokenAt(cx, cy) {
+  if (!G) return null;
+  const all = allTokens().filter(t => !isFogHidden(t));
   for (let i = all.length - 1; i >= 0; i--) {
     const t = all[i];
     const [sx, sy] = w2c(t.x, t.y);

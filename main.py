@@ -4040,12 +4040,16 @@ while running:
                 screen.blit(ov, (px, py))
                 pygame.draw.rect(screen, (140, 200, 255), (px, py, pw, ph), 2)
 
-    # Scene markers
+    # Scene markers (transient return portals and permanent ones alike hide under fog)
+    _fog_vr = _current_vision_radius() if fog.edit else 0
     for mk in scene_markers:
+        if fog.edit and not build_mode:
+            if not any(math.hypot(mk.x - c.x, mk.y - c.y) <= _fog_vr
+                       for c in _party_chars):
+                continue
         mk.draw(screen, camera_x, camera_y, TOOLBAR_HEIGHT, small_font)
 
     # Characters
-    _fog_vr = _current_vision_radius() if fog.edit else 0
     for char in characters:
         if fog.edit and not build_mode and getattr(char, 'is_npc', False):
             # NPC: hide unless a party member's vision circle covers them
